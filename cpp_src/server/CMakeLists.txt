@@ -157,9 +157,23 @@ if (LINK_RESOURCES)
     target_link_libraries(${TARGET} reindexer)
 endif()
 if (ENABLE_GRPC)
-    add_dependencies(${TARGET} reindexer_grpc_library)
-    add_subdirectory(grpc)
-    add_definitions(-DWITH_GRPC)
+    find_package(Protobuf QUIET)
+    set(HAVE_PROTOBUF ${Protobuf_FOUND})
+    if (NOT HAVE_PROTOBUF AND DEFINED PROTOBUF_FOUND)
+        set(HAVE_PROTOBUF ${PROTOBUF_FOUND})
+    endif()
+    find_package(gRPC QUIET)
+    if (HAVE_PROTOBUF AND gRPC_FOUND)
+        add_dependencies(${TARGET} reindexer_grpc_library)
+        add_subdirectory(grpc)
+        add_definitions(-DWITH_GRPC)
+    else()
+        message(WARNING
+            "ENABLE_GRPC=ON, but Protobuf and/or gRPC were not found. "
+            "Continuing build without gRPC support. "
+            "Install Protobuf/gRPC or reconfigure with -DENABLE_GRPC=OFF."
+        )
+    endif()
 endif()
 
 add_custom_target(face COMMAND "${CMAKE_COMMAND}" -P "${PROJECT_BINARY_DIR}/make_face.cmake")
