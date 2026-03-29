@@ -4,6 +4,8 @@
 #include "core/index/rtree/linearsplitter.h"
 #include "core/index/rtree/quadraticsplitter.h"
 #include "core/index/rtree/rstarsplitter.h"
+#include <cmath>
+#include <string>
 #include "gtest/gtest.h"
 #include "gtests/tools.h"
 #include "reindexer_api.h"
@@ -276,6 +278,46 @@ TEST(RTree, QuadraticMap) { TestMap<reindexer::QuadraticSplitter>(); }
 TEST(RTree, LinearMap) { TestMap<reindexer::LinearSplitter>(); }
 TEST(RTree, GreeneMap) { TestMap<reindexer::GreeneSplitter>(); }
 TEST(RTree, RStarMap) { TestMap<reindexer::RStarSplitter>(); }
+
+TEST(RTree, GeoDistanceAntipodesFinite) {
+	const double d = reindexer::GeoDistanceMeters(reindexer::Point{0.0, 0.0}, reindexer::Point{180.0, 0.0});
+	ASSERT_TRUE(std::isfinite(d));
+	ASSERT_GT(d, 20'000'000.0);
+	ASSERT_LT(d, 20'160'000.0);
+}
+
+TEST(RTree, GeoDWithinAntimeridianShortPath) {
+	const reindexer::Point p1{179.9, 0.0};
+	const reindexer::Point p2{-179.9, 0.0};
+	ASSERT_TRUE(reindexer::GeoDWithin(p1, p2, 25'000.0));
+	ASSERT_FALSE(reindexer::GeoDWithin(p1, p2, 10'000.0));
+}
+
+TEST(RTree, GeoIndexDefJsonKeepsGisType) {
+	reindexer::IndexDef def{"pt", "rtree", "point", reindexer::IndexOpts().Geo().RTreeType(reindexer::IndexOpts::RStar)};
+	reindexer::WrSerializer ser;
+	def.GetJSON(ser);
+	const std::string json = ser.Slice();
+	ASSERT_NE(json.find("\"index_type\":\"gis\""), std::string::npos) << json;
+	ASSERT_NE(json.find("\"crs\":\"wgs84\""), std::string::npos) << json;
+	ASSERT_NE(json.find("\"distance_unit\":\"m\""), std::string::npos) << json;
+}
+
+TEST(RTree, NonGisIndexDefRejectsGeoContractFields) {
+	const std::string json = R"json(
+	{
+		"name":"pt",
+		"json_paths":["pt"],
+		"field_type":"point",
+		"index_type":"rtree",
+		"rtree_type":"rstar",
+		"crs":"wgs84",
+		"distance_unit":"m"
+	}
+	)json";
+	const auto def = reindexer::IndexDef::FromJSON(json);
+	ASSERT_FALSE(def.ok());
+}
 
 // Make sure RTree indexes work with null values correctly
 TEST_F(ReindexerApi, EmptyRTreeSparseValues) {

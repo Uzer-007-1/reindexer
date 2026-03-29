@@ -481,6 +481,7 @@ Queries are possible only on the indexed fields, marked with `reindex` tag. The 
   - `-` – column index. Can't perform fast select because it's implemented with full-scan technic. Has the smallest memory overhead.
   - `ttl` - TTL index that works only with int64 fields. These indexes are quite convenient for representation of date fields (stored as UNIX timestamps) that expire after specified amount of seconds.
   - `rtree` - available only DWITHIN match. Acceptable only for `[2]float64` (or `reindexer.Point`) field type. For details see [geometry subsection](#geometry).
+  - `gis` - geospatial RTree mode for WGS84 coordinates. Uses the same underlying RTree structure, but applies GIS-specific validation and geodesic (meter-based) distance semantics.
 - `opts` – additional index options:
   - `pk` – field is part of a primary key. Struct must have at least 1 field tagged with `pk`
   - `composite` – create composite index. The field type must be an empty struct: `struct{}`.
@@ -2019,7 +2020,41 @@ The only supported request for geometry field is to find all points within a dis
 
 Corresponding SQL function is `ST_DWithin(field_name, point, distance)`.
 
-RTree index can be created for points. To do so, `rtree` and `linear`, `quadratic`, `greene` or `rstar` tags should be declared. `linear`, `quadratic`, `greene` or `rstar` means which algorithm of RTree construction would be used. Here algorithms are listed in order from optimized for insertion to optimized for search. But it depends on data. Test which is more appropriate for you. Default algorithm is `rstar`.
+RTree index can be created for points. To do so, `rtree` (or its alias `gis`) and `linear`, `quadratic`, `greene` or `rstar` tags should be declared. `linear`, `quadratic`, `greene` or `rstar` means which algorithm of RTree construction would be used. Here algorithms are listed in order from optimized for insertion to optimized for search. But it depends on data. Test which is more appropriate for you. Default algorithm is `rstar`.
+
+For `gis` indexes, point coordinates are additionally validated as WGS84 `[lon, lat]` ranges (`lon ∈ [-180, 180]`, `lat ∈ [-90, 90]`), and `DWithin` distance is interpreted in meters (great-circle metric).
+GIS `DWithin` also handles antimeridian (±180 longitude) wrap-around for indexed searches.
+
+Additionally, Go package now provides helper functions for WGS84 coordinates:
+- `ValidateGeoPoint(reindexer.Point)` for validating `[lon, lat]` bounds;
+- `GeoDistanceMeters(a, b)` for great-circle distance;
+- `GeoDWithin(a, b, meters)` for in-memory radius checks.
+
+`rtree` vs `gis` quick comparison:
+
+| Aspect | `rtree` | `gis` |
+|---|---|---|
+| Coordinate model | Generic 2D point | WGS84 `[lon, lat]` |
+| DWithin distance unit | 2D planar units | Meters |
+| Validation | Point tuple shape only | WGS84 ranges (`lon`, `lat`) |
+| Dateline wrap-around | Not guaranteed | Handled for indexed DWithin |
+| Migration | Existing behavior | Create new `gis` index, reindex data, switch queries |
+
+For `gis` indexes, API/index definitions also expose explicit GIS contract fields:
+- `crs` (currently only `wgs84`);
+- `distance_unit` (currently only `m`).
+
+### GIS migration & compatibility notes
+
+- `rtree -> gis` automatic migration is **not** performed by Reindexer.
+- Recommended migration sequence:
+  1. Create a new `gis` index on the target point field (`crs=wgs84`, `distance_unit=m`).
+  2. Reindex namespace data.
+  3. Switch query code to GIS semantics (`DWithinGeo`, `ST_GeoDistance`, or `ST_Distance` on GIS fields).
+  4. Remove old planar `rtree` index only after result parity checks on representative datasets.
+- Backward compatibility:
+  - existing `rtree` queries keep planar behavior;
+  - GIS semantics are enabled only for fields/indexes marked as `gis`.
 
 ```go
 type Item struct {
@@ -2029,6 +2064,11 @@ type Item struct {
 }
 
 query1 := db.Query("items").DWithin("point_indexed", reindexer.Point{-1.0, 1.0}, 4.0)
+query2 := db.Query("items").DWithinGeo("point_indexed", reindexer.Point{-1.0, 1.0}, 4000.0) // GIS helper (meters)
+query3, err := db.Query("items").DWithinGeoChecked("point_indexed", reindexer.Point{-1.0, 1.0}, 4000.0) // with validation error
+query4 := db.Query("items").SortStGeoPointDistance("point_indexed", reindexer.Point{-1.0, 1.0}, false)
+query5, err := db.Query("items").SortStGeoPointDistanceChecked("point_indexed", reindexer.Point{-1.0, 1.0}, false)
+query6 := db.Query("items").SortStGeoFieldDistance("point_indexed", "point_non_indexed", false)
 ```
 
 ```SQL

@@ -108,20 +108,22 @@ type FloatVectorIndexOpts struct {
 }
 
 type IndexDef struct {
-	Name        string      `json:"name"`
-	JSONPaths   []string    `json:"json_paths"`
-	IndexType   string      `json:"index_type"`
-	FieldType   string      `json:"field_type"`
-	IsPK        bool        `json:"is_pk"`
-	IsArray     bool        `json:"is_array"`
-	IsDense     bool        `json:"is_dense"`
-	IsNoColumn  bool        `json:"is_no_column"`
-	IsSparse    bool        `json:"is_sparse"`
-	CollateMode string      `json:"collate_mode"`
-	SortOrder   string      `json:"sort_order_letters"`
-	ExpireAfter int         `json:"expire_after"`
-	Config      interface{} `json:"config"`
-	RTreeType   string      `json:"rtree_type"`
+	Name         string      `json:"name"`
+	JSONPaths    []string    `json:"json_paths"`
+	IndexType    string      `json:"index_type"`
+	Crs          string      `json:"crs,omitempty"`
+	DistanceUnit string      `json:"distance_unit,omitempty"`
+	FieldType    string      `json:"field_type"`
+	IsPK         bool        `json:"is_pk"`
+	IsArray      bool        `json:"is_array"`
+	IsDense      bool        `json:"is_dense"`
+	IsNoColumn   bool        `json:"is_no_column"`
+	IsSparse     bool        `json:"is_sparse"`
+	CollateMode  string      `json:"collate_mode"`
+	SortOrder    string      `json:"sort_order_letters"`
+	ExpireAfter  int         `json:"expire_after"`
+	Config       interface{} `json:"config"`
+	RTreeType    string      `json:"rtree_type"`
 }
 
 type FieldDef struct {

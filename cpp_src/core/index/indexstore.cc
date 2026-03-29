@@ -152,6 +152,7 @@ SelectKeyResults IndexStore<T>::SelectKey(const VariantArray& keys, CondType con
 								IsDistinct(selectCtx.opts.distinct),
 								payloadType_,
 								Fields(),
+								opts_.IsGeo(),
 								opts_.collateOpts_};
 }
 

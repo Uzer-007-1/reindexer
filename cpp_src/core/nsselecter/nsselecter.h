@@ -78,6 +78,7 @@ private:
 							   bool availableSelectBySortIndex) const;
 	static void prepareSortIndex(const NamespaceImpl&, std::string& column, int& index, StrictMode, IsRanked);
 	static void prepareSortJoinedIndex(size_t nsIdx, std::string_view column, int& index, const std::vector<JoinedSelector>&, StrictMode);
+	static bool isSortIndexGeo(size_t nsIdx, int indexNo, const std::vector<JoinedSelector>&);
 	void getSortIndexValue(const SortingContext& sortCtx, IdType rowId, VariantArray& value, RankT, const joins::NamespaceResults*,
 						   const JoinedSelectors&, int shardId);
 	const CollateOpts& getSortIndexCollateOpts(const SortingContext& sortCtx, const JoinedSelectors&);

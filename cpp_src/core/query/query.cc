@@ -823,6 +823,22 @@ Query& Query::SortStDistance(std::string_view field1, std::string_view field2, b
 	return *this;
 }
 
+Query& Query::SortStGeoDistance(std::string_view field, Point p, bool desc) & {
+	if (field.empty()) [[unlikely]] {
+		throw Error(errParams, "Field name for ST_GeoDistance can not be empty");
+	}
+	sortingEntries_.emplace_back(fmt::format("ST_GeoDistance({},ST_GeomFromText('point({:.12f} {:.12f})'))", field, p.X(), p.Y()), desc);
+	return *this;
+}
+
+Query& Query::SortStGeoDistance(std::string_view field1, std::string_view field2, bool desc) & {
+	if (field1.empty() || field2.empty()) [[unlikely]] {
+		throw Error(errParams, "Fields names for ST_GeoDistance can not be empty");
+	}
+	sortingEntries_.emplace_back(fmt::format("ST_GeoDistance({},{})", field1, field2), desc);
+	return *this;
+}
+
 void Query::walkNested(bool withSelf, bool withMerged, bool withSubQueries,
 					   const std::function<void(Query& q)>& visitor) noexcept(noexcept(visitor(std::declval<Query&>()))) {
 	if (withSelf) {

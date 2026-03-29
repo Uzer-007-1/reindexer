@@ -3878,6 +3878,7 @@ components:
             - tree
             - text
             - rtree
+            - gis
             - ttl
             - '-'
         expire_after:
@@ -3926,6 +3927,18 @@ components:
             - quadratic
             - greene
             - rstar
+        crs:
+          type: string
+          description: Coordinate reference system for GIS indexes
+          default: wgs84
+          enum:
+            - wgs84
+        distance_unit:
+          type: string
+          description: Distance unit for GIS spatial functions
+          default: m
+          enum:
+            - m
         is_simple_tag:
           type: boolean
           description:

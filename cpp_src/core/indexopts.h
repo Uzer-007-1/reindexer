@@ -27,6 +27,7 @@ enum [[nodiscard]] IndexOpt : uint8_t {
 	kIndexOptPK = 1 << 7,
 	kIndexOptArray = 1 << 6,
 	kIndexOptDense = 1 << 5,
+	kIndexOptGeo = 1 << 4,
 	kIndexOptSparse = 1 << 3,
 	kIndexOptNoColumn = 1 << 2,
 };
@@ -168,15 +169,20 @@ private:
 /// in memory.h and unordered_map.h
 struct [[nodiscard]] IndexOpts {
 	enum [[nodiscard]] RTreeIndexType : uint8_t { Linear = 0, Quadratic = 1, Greene = 2, RStar = 3 };
+	enum class [[nodiscard]] GeoCrs : uint8_t { None = 0, WGS84 };
+	enum class [[nodiscard]] GeoDistanceUnit : uint8_t { Default = 0, Meters };
 	explicit IndexOpts(uint8_t flags = 0, CollateMode mode = CollateNone, RTreeIndexType = RStar);
 	explicit IndexOpts(const std::string& sortOrderUTF8, uint8_t flags = 0, RTreeIndexType = RStar);
 
 	reindexer::IsPk IsPK() const noexcept { return reindexer::IsPk(options & kIndexOptPK); }
 	reindexer::IsArray IsArray() const noexcept { return reindexer::IsArray(options & kIndexOptArray); }
 	reindexer::IsDense IsDense() const noexcept { return reindexer::IsDense(options & kIndexOptDense); }
+	reindexer::IsGeo IsGeo() const noexcept { return reindexer::IsGeo(options & kIndexOptGeo); }
 	reindexer::IsSparse IsSparse() const noexcept { return reindexer::IsSparse(options & kIndexOptSparse); }
 	reindexer::IsNoIndexColumn IsNoIndexColumn() const noexcept { return reindexer::IsNoIndexColumn(options & kIndexOptNoColumn); }
 	RTreeIndexType RTreeType() const noexcept { return rtreeType_; }
+	GeoCrs Crs() const noexcept { return geoCrs_; }
+	GeoDistanceUnit DistanceUnit() const noexcept { return geoDistanceUnit_; }
 	bool HasConfig() const noexcept { return !config_.empty(); }
 
 	IndexOpts& PK(bool value = true) &;
@@ -185,12 +191,24 @@ struct [[nodiscard]] IndexOpts {
 	IndexOpts&& Array(bool value = true) && { return std::move(Array(value)); }
 	IndexOpts& Dense(bool value = true) & noexcept;
 	IndexOpts&& Dense(bool value = true) && noexcept { return std::move(Dense(value)); }
+	IndexOpts& Geo(bool value = true) & noexcept;
+	IndexOpts&& Geo(bool value = true) && noexcept { return std::move(Geo(value)); }
 	IndexOpts& NoIndexColumn(bool value = true) & noexcept;
 	IndexOpts&& NoIndexColumn(bool value = true) && noexcept { return std::move(NoIndexColumn(value)); }
 	IndexOpts& Sparse(bool value = true) &;
 	IndexOpts&& Sparse(bool value = true) && { return std::move(Sparse(value)); }
 	IndexOpts& RTreeType(RTreeIndexType) & noexcept;
 	IndexOpts&& RTreeType(RTreeIndexType type) && noexcept { return std::move(RTreeType(type)); }
+	IndexOpts& SetGeoCrs(GeoCrs value) & noexcept {
+		geoCrs_ = value;
+		return *this;
+	}
+	IndexOpts&& SetGeoCrs(GeoCrs value) && noexcept { return std::move(SetGeoCrs(value)); }
+	IndexOpts& SetDistanceUnit(GeoDistanceUnit value) & noexcept {
+		geoDistanceUnit_ = value;
+		return *this;
+	}
+	IndexOpts&& SetDistanceUnit(GeoDistanceUnit value) && noexcept { return std::move(SetDistanceUnit(value)); }
 	IndexOpts& SetCollateMode(CollateMode mode) & noexcept;
 	IndexOpts&& SetCollateMode(CollateMode mode) && noexcept { return std::move(SetCollateMode(mode)); }
 	IndexOpts& SetCollateSortOrder(reindexer::SortingPrioritiesTable&& sortOrder) & noexcept;
@@ -235,6 +253,8 @@ struct [[nodiscard]] IndexOpts {
 	uint8_t options;
 	CollateOpts collateOpts_;
 	RTreeIndexType rtreeType_ = RStar;
+	GeoCrs geoCrs_ = GeoCrs::None;
+	GeoDistanceUnit geoDistanceUnit_ = GeoDistanceUnit::Default;
 
 	using OptsDiff = IndexOpt;
 
@@ -242,6 +262,8 @@ struct [[nodiscard]] IndexOpts {
 		CollateOpts = 1,
 		RTreeIndexType = 1 << 1,
 		Config = 1 << 2,
+		GeoCrs = 1 << 3,
+		GeoDistanceUnit = 1 << 4,
 	};
 
 	using DiffResult = compare_enum::Diff<IndexOpts::ParamsDiff, IndexOpts::OptsDiff, FloatVectorIndexOpts::Diff>;

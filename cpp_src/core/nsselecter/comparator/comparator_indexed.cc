@@ -554,25 +554,34 @@ ComparatorIndexedCompositeDistinct::ComparatorIndexedCompositeDistinct(const Var
 	}
 }
 
-ComparatorIndexedOffsetArrayDWithin::ComparatorIndexedOffsetArrayDWithin(size_t offset, const VariantArray& values)
-	: point_{GetValue<Point>(CondDWithin, values, 0)}, distance_{GetValue<double>(CondDWithin, values, 1)}, offset_{offset} {}
+ComparatorIndexedOffsetArrayDWithin::ComparatorIndexedOffsetArrayDWithin(size_t offset, const VariantArray& values, bool geo)
+	: point_{GetValue<Point>(CondDWithin, values, 0)},
+	  distance_{GetValue<double>(CondDWithin, values, 1)},
+	  offset_{offset},
+	  geo_{geo} {}
 
-ComparatorIndexedOffsetArrayDWithinDistinct::ComparatorIndexedOffsetArrayDWithinDistinct(size_t offset, const VariantArray& values)
-	: point_{GetValue<Point>(CondDWithin, values, 0)}, distance_{GetValue<double>(CondDWithin, values, 1)}, offset_{offset} {}
+ComparatorIndexedOffsetArrayDWithinDistinct::ComparatorIndexedOffsetArrayDWithinDistinct(size_t offset, const VariantArray& values,
+																						 bool geo)
+	: point_{GetValue<Point>(CondDWithin, values, 0)},
+	  distance_{GetValue<double>(CondDWithin, values, 1)},
+	  offset_{offset},
+	  geo_{geo} {}
 
 ComparatorIndexedJsonPathDWithin::ComparatorIndexedJsonPathDWithin(const FieldsSet& fields, const PayloadType& payloadType,
-																   const VariantArray& values)
+																   const VariantArray& values, bool geo)
 	: payloadType_{payloadType},
 	  tagsPath_{fields.getTagsPath(0)},
 	  point_{GetValue<Point>(CondDWithin, values, 0)},
-	  distance_{GetValue<double>(CondDWithin, values, 1)} {}
+	  distance_{GetValue<double>(CondDWithin, values, 1)},
+	  geo_{geo} {}
 
 ComparatorIndexedJsonPathDWithinDistinct::ComparatorIndexedJsonPathDWithinDistinct(const FieldsSet& fields, const PayloadType& payloadType,
-																				   const VariantArray& values)
+																				   const VariantArray& values, bool geo)
 	: payloadType_{payloadType},
 	  tagsPath_{fields.getTagsPath(0)},
 	  point_{GetValue<Point>(CondDWithin, values, 0)},
-	  distance_{GetValue<double>(CondDWithin, values, 1)} {}
+	  distance_{GetValue<double>(CondDWithin, values, 1)},
+	  geo_{geo} {}
 
 std::string ComparatorIndexedOffsetArrayDWithin::ConditionStr() const { return pointComparatorCondStr(point_, distance_); }
 
@@ -606,7 +615,7 @@ std::string ComparatorIndexed<FloatVector>::ConditionStr() const {
 template <typename T>
 comparators::ComparatorIndexedVariant<T> ComparatorIndexed<T>::createImpl(CondType cond, const VariantArray& values, const void* rawData,
 																		  reindexer::IsDistinct distinct, IsArray isArray,
-																		  const PayloadType& payloadType, const FieldsSet& fields,
+																		  const PayloadType& payloadType, const FieldsSet& fields, bool,
 																		  const CollateOpts&) {
 	using namespace comparators;
 	if (fields.getTagsPathsLength() != 0) {
@@ -780,26 +789,26 @@ comparators::ComparatorIndexedVariant<T> ComparatorIndexed<T>::createImpl(CondTy
 
 template comparators::ComparatorIndexedVariant<int> ComparatorIndexed<int>::createImpl(CondType, const VariantArray&, const void*,
 																					   reindexer::IsDistinct, IsArray, const PayloadType&,
-																					   const FieldsSet&, const CollateOpts&);
+																					   const FieldsSet&, bool, const CollateOpts&);
 template comparators::ComparatorIndexedVariant<int64_t> ComparatorIndexed<int64_t>::createImpl(CondType, const VariantArray&, const void*,
 																							   reindexer::IsDistinct, IsArray,
-																							   const PayloadType&, const FieldsSet&,
+																							   const PayloadType&, const FieldsSet&, bool,
 																							   const CollateOpts&);
 template comparators::ComparatorIndexedVariant<double> ComparatorIndexed<double>::createImpl(CondType, const VariantArray&, const void*,
 																							 reindexer::IsDistinct, IsArray,
-																							 const PayloadType&, const FieldsSet&,
+																							 const PayloadType&, const FieldsSet&, bool,
 																							 const CollateOpts&);
 template comparators::ComparatorIndexedVariant<bool> ComparatorIndexed<bool>::createImpl(CondType, const VariantArray&, const void*,
 																						 reindexer::IsDistinct, IsArray, const PayloadType&,
-																						 const FieldsSet&, const CollateOpts&);
+																						 const FieldsSet&, bool, const CollateOpts&);
 template comparators::ComparatorIndexedVariant<Uuid> ComparatorIndexed<Uuid>::createImpl(CondType, const VariantArray&, const void*,
 																						 reindexer::IsDistinct, IsArray, const PayloadType&,
-																						 const FieldsSet&, const CollateOpts&);
+																						 const FieldsSet&, bool, const CollateOpts&);
 
 template <>
 comparators::ComparatorIndexedVariant<key_string> ComparatorIndexed<key_string>::createImpl(
 	CondType cond, const VariantArray& values, const void* rawData, reindexer::IsDistinct distinct, IsArray isArray,
-	const PayloadType& payloadType, const FieldsSet& fields, const CollateOpts& collate) {
+	const PayloadType& payloadType, const FieldsSet& fields, bool, const CollateOpts& collate) {
 	using namespace comparators;
 	if (fields.getTagsPathsLength() != 0) {
 		switch (cond) {
@@ -970,7 +979,7 @@ comparators::ComparatorIndexedVariant<key_string> ComparatorIndexed<key_string>:
 template <>
 comparators::ComparatorIndexedVariant<PayloadValue> ComparatorIndexed<PayloadValue>::createImpl(
 	CondType cond, const VariantArray& values, const void* /*rawData*/, reindexer::IsDistinct distinct, IsArray isArray,
-	const PayloadType& payloadType, const FieldsSet& fields, const CollateOpts& collate) {
+	const PayloadType& payloadType, const FieldsSet& fields, bool, const CollateOpts& collate) {
 	using namespace comparators;
 	if (isArray) {
 		throw Error{errQueryExec, "Array composite index"};
@@ -1008,15 +1017,15 @@ template <>
 comparators::ComparatorIndexedVariant<Point> ComparatorIndexed<Point>::createImpl(CondType cond, const VariantArray& values,
 																				  const void* /*rawData*/, reindexer::IsDistinct distinct,
 																				  IsArray isArray, const PayloadType& payloadType,
-																				  const FieldsSet& fields, const CollateOpts&) {
+																				  const FieldsSet& fields, bool isGeo, const CollateOpts&) {
 	using namespace comparators;
 	if (fields.getTagsPathsLength() != 0) {
 		switch (cond) {
 			case CondDWithin:
 				if (distinct) {
-					return ComparatorIndexedJsonPathDWithinDistinct{fields, payloadType, values};
+					return ComparatorIndexedJsonPathDWithinDistinct{fields, payloadType, values, isGeo};
 				} else {
-					return ComparatorIndexedJsonPathDWithin{fields, payloadType, values};
+					return ComparatorIndexedJsonPathDWithin{fields, payloadType, values, isGeo};
 				}
 			case CondEmpty:
 			case CondAny:
@@ -1044,9 +1053,9 @@ comparators::ComparatorIndexedVariant<Point> ComparatorIndexed<Point>::createImp
 				return ComparatorIndexedOffsetArrayAnyDistinct<Point>{offset};
 			case CondDWithin:
 				if (distinct) {
-					return ComparatorIndexedOffsetArrayDWithinDistinct{offset, values};
+					return ComparatorIndexedOffsetArrayDWithinDistinct{offset, values, isGeo};
 				} else {
-					return ComparatorIndexedOffsetArrayDWithin{offset, values};
+					return ComparatorIndexedOffsetArrayDWithin{offset, values, isGeo};
 				}
 			case CondEmpty:
 			case CondEq:
@@ -1070,7 +1079,7 @@ comparators::ComparatorIndexedVariant<Point> ComparatorIndexed<Point>::createImp
 template <>
 comparators::ComparatorIndexedVariant<FloatVector> ComparatorIndexed<FloatVector>::createImpl(
 	CondType cond, const VariantArray&, const void*, [[maybe_unused]] reindexer::IsDistinct distinct, [[maybe_unused]] IsArray isArray,
-	const PayloadType& payloadType, const FieldsSet& fields, const CollateOpts&) {
+	const PayloadType& payloadType, const FieldsSet& fields, bool, const CollateOpts&) {
 	using namespace comparators;
 	switch (cond) {
 		case CondAny: {

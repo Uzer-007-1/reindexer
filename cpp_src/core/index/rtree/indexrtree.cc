@@ -1,6 +1,7 @@
 #include "indexrtree.h"
 
 #include "core/rdxcontext.h"
+#include <unordered_set>
 #include "greenesplitter.h"
 #include "linearsplitter.h"
 #include "quadraticsplitter.h"
@@ -8,13 +9,34 @@
 
 namespace reindexer {
 
+namespace {
+bool isValidLongitude(double x) noexcept { return x >= -180.0 && x <= 180.0; }
+bool isValidLatitude(double y) noexcept { return y >= -90.0 && y <= 90.0; }
+double metersToDegrees(double distanceMeters) noexcept {
+	constexpr double kMetersPerDegreeAtEquator = 111319.49079327358;
+	return distanceMeters / kMetersPerDegreeAtEquator;
+}
+void validateGeoPoint(Point p, std::string_view context) {
+	if (!isValidLongitude(p.X()) || !isValidLatitude(p.Y())) {
+		throw Error(errParams, "{}: GIS point is out of WGS84 range. Expected [lon, lat], got [{}, {}]", context, p.X(), p.Y());
+	}
+}
+void validateGeoIndexPoint(Point p, std::string_view context) {
+	if (!isValidLongitude(p.X()) || !isValidLatitude(p.Y())) {
+		throw Error(errQueryExec, "{}: GIS index contains point out of WGS84 range. Expected [lon, lat], got [{}, {}]", context, p.X(),
+					p.Y());
+	}
+}
+}  // namespace
+
 template <typename KeyEntryT, template <typename, typename, typename, typename, size_t, size_t> class Splitter, size_t MaxEntries,
 		  size_t MinEntries>
 SelectKeyResults IndexRTree<KeyEntryT, Splitter, MaxEntries, MinEntries>::SelectKey(const VariantArray& keys, CondType condition,
 																					SortType sortId, const Index::SelectContext& selectCtx,
 																					const RdxContext& rdxCtx) {
 	const auto indexWard(rdxCtx.BeforeIndexWork());
-	if (selectCtx.opts.forceComparator) {
+	// Generic comparator path is planar and should not be used for GIS semantics.
+	if (selectCtx.opts.forceComparator && !this->opts_.IsGeo()) {
 		return IndexStore<typename Map::key_type>::SelectKey(keys, condition, sortId, selectCtx, rdxCtx);
 	}
 
@@ -35,6 +57,12 @@ SelectKeyResults IndexRTree<KeyEntryT, Splitter, MaxEntries, MinEntries>::Select
 		point = keys[1].As<Point>();
 		distance = keys[0].As<double>();
 	}
+	if (this->opts_.IsGeo()) {
+		validateGeoPoint(point, "Select DWithin");
+		if (distance < 0.0) {
+			throw Error(errParams, "Select DWithin: GIS distance can not be negative");
+		}
+	}
 	class [[nodiscard]] Visitor : public Map::Visitor {
 	public:
 		Visitor(SortType sId, unsigned distinct, unsigned iCountInNs, SelectKeyResult& r)
@@ -54,6 +82,52 @@ SelectKeyResults IndexRTree<KeyEntryT, Splitter, MaxEntries, MinEntries>::Select
 		SelectKeyResult& res_;
 		size_t idsCount_ = 0;
 	} visitor{sortId, selectCtx.opts.distinct, selectCtx.opts.itemsCountInNamespace, res};
+	if (this->opts_.IsGeo()) {
+		class [[nodiscard]] GeoVisitor : public Map::Visitor {
+		public:
+			GeoVisitor(SortType sId, unsigned distinct, unsigned iCountInNs, SelectKeyResult& r, Point c, double dMeters)
+				: sortId_{sId}, itemsCountInNs_{distinct ? 0u : iCountInNs}, res_{r}, center_{c}, distanceMeters_{dMeters} {}
+			bool operator()(const typename Map::value_type& v) override {
+				validateGeoIndexPoint(v.first, "Select DWithin");
+				if (!visitedPoints_.emplace(v.first).second) {
+					return false;
+				}
+				if (!GeoDWithin(v.first, center_, distanceMeters_)) {
+					return false;
+				}
+				idsCount_ += v.second.Unsorted().size();
+				res_.emplace_back(v.second, sortId_);
+				return ScanWin();
+			}
+			bool ScanWin() const noexcept {
+				return itemsCountInNs_ && res_.size() > 1u && (100u * idsCount_ / itemsCountInNs_ > maxSelectivityPercentForIdset());
+			}
+
+		private:
+			SortType sortId_;
+			unsigned itemsCountInNs_;
+			SelectKeyResult& res_;
+			Point center_;
+			double distanceMeters_;
+			std::unordered_set<Point, std::hash<Point>, point_strict_equal> visitedPoints_;
+			size_t idsCount_ = 0;
+		} geoVisitor{sortId, selectCtx.opts.distinct, selectCtx.opts.itemsCountInNamespace, res, point, distance};
+		const double degRadius = metersToDegrees(distance);
+		this->idx_map.DWithin(point, degRadius, geoVisitor);
+		// Handle antimeridian wrap-around for GIS longitudes.
+		const double minLon = point.X() - degRadius;
+		const double maxLon = point.X() + degRadius;
+		if (minLon < -180.0) {
+			this->idx_map.DWithin(Point{point.X() + 360.0, point.Y()}, degRadius, geoVisitor);
+		}
+		if (maxLon > 180.0) {
+			this->idx_map.DWithin(Point{point.X() - 360.0, point.Y()}, degRadius, geoVisitor);
+		}
+		// NOTE: Fallback to generic comparator is intentionally disabled for GIS mode,
+		// because generic DWithin comparator works in planar coordinates and may produce
+		// incorrect results for geodesic (meters-based) semantics.
+		return SelectKeyResults(std::move(res));
+	}
 	this->idx_map.DWithin(point, distance, visitor);
 	if (visitor.ScanWin()) {
 		// fallback to comparator, due to expensive idset
@@ -74,6 +148,9 @@ void IndexRTree<KeyEntryT, Splitter, MaxEntries, MinEntries>::Upsert(VariantArra
 		[[maybe_unused]] Point p{keys};
 	}
 	const Point point{keys[0].IsNullValue() ? 0.0 : keys[0].As<double>(), keys[1].IsNullValue() ? 0.0 : keys[1].As<double>()};
+	if (this->opts_.IsGeo()) {
+		validateGeoPoint(point, "Upsert");
+	}
 	typename Map::iterator keyIt = this->idx_map.find(point);
 	if (keyIt == this->idx_map.end()) {
 		keyIt = this->idx_map.insert_without_test({point, typename Map::mapped_type()});

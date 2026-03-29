@@ -447,13 +447,16 @@ IndexOpts::DiffResult IndexOpts::Compare(const IndexOpts& o) const noexcept {
 				   .Set<OptsDiff::kIndexOptPK>(IsPK() == o.IsPK())
 				   .Set<OptsDiff::kIndexOptArray>(IsArray() == o.IsArray())
 				   .Set<OptsDiff::kIndexOptDense>(IsDense() == o.IsDense())
+				   .Set<OptsDiff::kIndexOptGeo>(IsGeo() == o.IsGeo())
 				   .Set<OptsDiff::kIndexOptSparse>(IsSparse() == o.IsSparse())
 				   .Set<OptsDiff::kIndexOptNoColumn>(IsNoIndexColumn() == o.IsNoIndexColumn())
 				   .Set<ParamsDiff::CollateOpts>(collateOpts_.mode == o.collateOpts_.mode &&
 												 collateOpts_.sortOrderTable.GetSortOrderCharacters() ==
-													 collateOpts_.sortOrderTable.GetSortOrderCharacters())
+													 o.collateOpts_.sortOrderTable.GetSortOrderCharacters())
 				   .Set<ParamsDiff::RTreeIndexType>(rtreeType_ == o.rtreeType_)
-				   .Set<ParamsDiff::Config>(config_ == o.config_);
+				   .Set<ParamsDiff::Config>(config_ == o.config_)
+				   .Set<ParamsDiff::GeoCrs>(geoCrs_ == o.geoCrs_)
+				   .Set<ParamsDiff::GeoDistanceUnit>(geoDistanceUnit_ == o.geoDistanceUnit_);
 
 	if (floatVector_ && o.floatVector_) {
 		res.Set(floatVector_->Compare(*o.floatVector_));
@@ -528,6 +531,18 @@ IndexOpts& IndexOpts::Dense(bool value) & noexcept {
 	options = value ? options | kIndexOptDense : options & ~(kIndexOptDense);
 	return *this;
 }
+IndexOpts& IndexOpts::Geo(bool value) & noexcept {
+	options = value ? options | kIndexOptGeo : options & ~(kIndexOptGeo);
+	if (value) {
+		if (geoCrs_ == GeoCrs::None) {
+			geoCrs_ = GeoCrs::WGS84;
+		}
+		if (geoDistanceUnit_ == GeoDistanceUnit::Default) {
+			geoDistanceUnit_ = GeoDistanceUnit::Meters;
+		}
+	}
+	return *this;
+}
 IndexOpts& IndexOpts::NoIndexColumn(bool value) & noexcept {
 	options = value ? options | kIndexOptNoColumn : options & ~(kIndexOptNoColumn);
 	return *this;
@@ -576,6 +591,20 @@ void IndexOpts::Dump(T& os) const {
 			os << ", ";
 		}
 		os << "Dense";
+		needComma = true;
+	}
+	if (IsGeo()) {
+		if (needComma) {
+			os << ", ";
+		}
+		os << "Geo";
+		if (geoCrs_ == GeoCrs::WGS84) {
+			os << "(crs=wgs84";
+			if (geoDistanceUnit_ == GeoDistanceUnit::Meters) {
+				os << ", distance_unit=m";
+			}
+			os << ')';
+		}
 		needComma = true;
 	}
 	if (IsNoIndexColumn()) {

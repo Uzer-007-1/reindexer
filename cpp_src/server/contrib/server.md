@@ -764,7 +764,7 @@ If namespace is already exists, then operation do not nothing.
     // Field data type
     field_type: enum[int, int64, double, string, bool, composite, point]
     // Index structure type
-    index_type: enum[hash, tree, text, rtree, ttl, -] //default: hash
+    index_type: enum[hash, tree, text, rtree, gis, ttl, -] //default: hash
     // Specify, time to live for ttl index, in seconds
     expire_after?: integer
     // Specifies, that index is primary key. The update operations will checks, that PK field is unique. The namespace MUST have only 1 PK index
@@ -909,7 +909,7 @@ This operation will return specified namespace description, including options of
     // Field data type
     field_type: enum[int, int64, double, string, bool, composite, point]
     // Index structure type
-    index_type: enum[hash, tree, text, rtree, ttl, -] //default: hash
+    index_type: enum[hash, tree, text, rtree, gis, ttl, -] //default: hash
     // Specify, time to live for ttl index, in seconds
     expire_after?: integer
     // Specifies, that index is primary key. The update operations will checks, that PK field is unique. The namespace MUST have only 1 PK index
@@ -2379,7 +2379,7 @@ This operation will return list of available indexes, from specified database an
     // Field data type
     field_type: enum[int, int64, double, string, bool, composite, point]
     // Index structure type
-    index_type: enum[hash, tree, text, rtree, ttl, -] //default: hash
+    index_type: enum[hash, tree, text, rtree, gis, ttl, -] //default: hash
     // Specify, time to live for ttl index, in seconds
     expire_after?: integer
     // Specifies, that index is primary key. The update operations will checks, that PK field is unique. The namespace MUST have only 1 PK index
@@ -2502,7 +2502,7 @@ Operation synchronous, so it can take long time, if namespace contains bunch of 
   // Field data type
   field_type: enum[int, int64, double, string, bool, composite, point]
   // Index structure type
-  index_type: enum[hash, tree, text, rtree, ttl, -] //default: hash
+  index_type: enum[hash, tree, text, rtree, gis, ttl, -] //default: hash
   // Specify, time to live for ttl index, in seconds
   expire_after?: integer
   // Specifies, that index is primary key. The update operations will checks, that PK field is unique. The namespace MUST have only 1 PK index
@@ -2517,6 +2517,10 @@ Operation synchronous, so it can take long time, if namespace contains bunch of 
   is_sparse?: boolean
   // Algorithm to construct RTree index
   rtree_type?: enum[linear, quadratic, greene, rstar] //default: rstar
+  // Coordinate reference system for GIS indexes
+  crs?: enum[wgs84] //default: wgs84
+  // Distance unit for GIS spatial functions
+  distance_unit?: enum[m] //default: m
   // Use simple tag instead of actual index, which will notice rx about possible field name for strict policies
   is_simple_tag?: boolean
   // String collate mode
@@ -2638,7 +2642,7 @@ Operation synchronous, so it can take long time, if namespace contains bunch of 
   // Field data type
   field_type: enum[int, int64, double, string, bool, composite, point]
   // Index structure type
-  index_type: enum[hash, tree, text, rtree, ttl, -] //default: hash
+  index_type: enum[hash, tree, text, rtree, gis, ttl, -] //default: hash
   // Specify, time to live for ttl index, in seconds
   expire_after?: integer
   // Specifies, that index is primary key. The update operations will checks, that PK field is unique. The namespace MUST have only 1 PK index
@@ -2653,6 +2657,10 @@ Operation synchronous, so it can take long time, if namespace contains bunch of 
   is_sparse?: boolean
   // Algorithm to construct RTree index
   rtree_type?: enum[linear, quadratic, greene, rstar] //default: rstar
+  // Coordinate reference system for GIS indexes
+  crs?: enum[wgs84] //default: wgs84
+  // Distance unit for GIS spatial functions
+  distance_unit?: enum[m] //default: m
   // Use simple tag instead of actual index, which will notice rx about possible field name for strict policies
   is_simple_tag?: boolean
   // String collate mode
@@ -7794,7 +7802,7 @@ type: enum[namespaces, replication, async_replication, profiling, embedders] //d
     // Field data type
     field_type: enum[int, int64, double, string, bool, composite, point]
     // Index structure type
-    index_type: enum[hash, tree, text, rtree, ttl, -] //default: hash
+    index_type: enum[hash, tree, text, rtree, gis, ttl, -] //default: hash
     // Specify, time to live for ttl index, in seconds
     expire_after?: integer
     // Specifies, that index is primary key. The update operations will checks, that PK field is unique. The namespace MUST have only 1 PK index
@@ -7830,7 +7838,7 @@ type: enum[namespaces, replication, async_replication, profiling, embedders] //d
   // Field data type
   field_type: enum[int, int64, double, string, bool, composite, point]
   // Index structure type
-  index_type: enum[hash, tree, text, rtree, ttl, -] //default: hash
+  index_type: enum[hash, tree, text, rtree, gis, ttl, -] //default: hash
   // Specify, time to live for ttl index, in seconds
   expire_after?: integer
   // Specifies, that index is primary key. The update operations will checks, that PK field is unique. The namespace MUST have only 1 PK index
@@ -7845,6 +7853,10 @@ type: enum[namespaces, replication, async_replication, profiling, embedders] //d
   is_sparse?: boolean
   // Algorithm to construct RTree index
   rtree_type?: enum[linear, quadratic, greene, rstar] //default: rstar
+  // Coordinate reference system for GIS indexes
+  crs?: enum[wgs84] //default: wgs84
+  // Distance unit for GIS spatial functions
+  distance_unit?: enum[m] //default: m
   // Use simple tag instead of actual index, which will notice rx about possible field name for strict policies
   is_simple_tag?: boolean
   // String collate mode
@@ -8953,7 +8965,7 @@ type: enum[namespaces, replication, async_replication, profiling, embedders] //d
     // Field data type
     field_type: enum[int, int64, double, string, bool, composite, point]
     // Index structure type
-    index_type: enum[hash, tree, text, rtree, ttl, -] //default: hash
+    index_type: enum[hash, tree, text, rtree, gis, ttl, -] //default: hash
     // Specify, time to live for ttl index, in seconds
     expire_after?: integer
     // Specifies, that index is primary key. The update operations will checks, that PK field is unique. The namespace MUST have only 1 PK index

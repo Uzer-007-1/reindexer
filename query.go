@@ -730,6 +730,24 @@ func (q *Query) DWithin(index string, point Point, distance float64) *Query {
 	return q
 }
 
+// DWithinGeo - Add DWithin condition for GIS index with WGS84 point and distance in meters.
+// This is a semantic alias of DWithin intended for readability in geospatial code.
+func (q *Query) DWithinGeo(index string, point Point, distanceMeters float64) *Query {
+	return q.DWithin(index, point, distanceMeters)
+}
+
+// DWithinGeoChecked - Add DWithin condition for GIS index with WGS84 point and distance in meters.
+// Returns validation error for invalid point/radius and leaves query unchanged.
+func (q *Query) DWithinGeoChecked(index string, point Point, distanceMeters float64) (*Query, error) {
+	if err := ValidateGeoPoint(point); err != nil {
+		return q, fmt.Errorf("rq: invalid GIS point in DWithinGeoChecked: %w", err)
+	}
+	if distanceMeters < 0 {
+		return q, fmt.Errorf("rq: distance must be non-negative in DWithinGeoChecked, got %v", distanceMeters)
+	}
+	return q.DWithin(index, point, distanceMeters), nil
+}
+
 func (q *Query) setAggregate(field string, aggregateType int) *Query {
 	q.ser.PutVarCUInt(queryAggregation).PutVarCUInt(aggregateType).PutVarCUInt(1).PutVString(field)
 	return q
@@ -796,7 +814,8 @@ func (q *Query) Sort(sortIndex string, desc bool, values ...interface{}) *Query 
 	return q
 }
 
-// SortStDistance - wrapper for geometry sorting by shortest distance between geometry field and point (ST_Distance)
+// SortStDistance - wrapper for sorting by shortest distance between field and point (ST_Distance).
+// For 'rtree' fields it uses planar distance; for 'gis' fields it uses geodesic meters.
 func (q *Query) SortStPointDistance(field string, p Point, desc bool) *Query {
 	var sb strings.Builder
 	sb.Grow(256)
@@ -810,11 +829,47 @@ func (q *Query) SortStPointDistance(field string, p Point, desc bool) *Query {
 	return q.Sort(sb.String(), desc)
 }
 
-// SortStDistance - wrapper for geometry sorting by the shortest distance between two geometry fields (ST_Distance)
+// SortStDistance - wrapper for sorting by shortest distance between two geometry fields (ST_Distance).
+// For two 'rtree' fields it uses planar distance; for two 'gis' fields it uses geodesic meters.
 func (q *Query) SortStFieldDistance(field1 string, field2 string, desc bool) *Query {
 	var sb strings.Builder
 	sb.Grow(256)
 	sb.WriteString("ST_Distance(")
+	sb.WriteString(field1)
+	sb.WriteRune(',')
+	sb.WriteString(field2)
+	sb.WriteRune(')')
+	return q.Sort(sb.String(), desc)
+}
+
+// SortStGeoDistance - wrapper for GIS sorting by geodesic distance between geometry field and point (ST_GeoDistance, meters)
+func (q *Query) SortStGeoPointDistance(field string, p Point, desc bool) *Query {
+	var sb strings.Builder
+	sb.Grow(256)
+	sb.WriteString("ST_GeoDistance(")
+	sb.WriteString(field)
+	sb.WriteString(",ST_GeomFromText('point(")
+	sb.WriteString(strconv.FormatFloat(p[0], 'f', -1, 64))
+	sb.WriteRune(' ')
+	sb.WriteString(strconv.FormatFloat(p[1], 'f', -1, 64))
+	sb.WriteString(")'))")
+	return q.Sort(sb.String(), desc)
+}
+
+// SortStGeoPointDistanceChecked - wrapper for GIS sorting by geodesic distance between field and point (ST_GeoDistance, meters)
+// with longitude/latitude validation for point argument.
+func (q *Query) SortStGeoPointDistanceChecked(field string, p Point, desc bool) (*Query, error) {
+	if err := ValidateGeoPoint(p); err != nil {
+		return q, fmt.Errorf("rq: invalid GIS point in SortStGeoPointDistanceChecked: %w", err)
+	}
+	return q.SortStGeoPointDistance(field, p, desc), nil
+}
+
+// SortStGeoDistance - wrapper for GIS sorting by geodesic distance between two geometry fields (ST_GeoDistance, meters)
+func (q *Query) SortStGeoFieldDistance(field1 string, field2 string, desc bool) *Query {
+	var sb strings.Builder
+	sb.Grow(256)
+	sb.WriteString("ST_GeoDistance(")
 	sb.WriteString(field1)
 	sb.WriteRune(',')
 	sb.WriteString(field2)
