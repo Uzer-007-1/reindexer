@@ -1,6 +1,8 @@
 #include "indexrtree.h"
 
 #include "core/rdxcontext.h"
+#include <cmath>
+#include <limits>
 #include <unordered_set>
 #include "greenesplitter.h"
 #include "linearsplitter.h"
@@ -15,6 +17,28 @@ bool isValidLatitude(double y) noexcept { return y >= -90.0 && y <= 90.0; }
 double metersToDegrees(double distanceMeters) noexcept {
 	constexpr double kMetersPerDegreeAtEquator = 111319.49079327358;
 	return distanceMeters / kMetersPerDegreeAtEquator;
+}
+
+struct [[nodiscard]] GeoPrefilterEnvelope {
+	double latRadiusDeg = 0.0;
+	double lonRadiusDeg = 0.0;
+	double circleRadiusDeg = 0.0;
+	bool requiresFullScan = false;
+};
+
+GeoPrefilterEnvelope buildGeoPrefilterEnvelope(Point center, double distanceMeters) noexcept {
+	constexpr double kPi = 3.14159265358979323846;
+	constexpr double kDegToRad = kPi / 180.0;
+	constexpr double kCosEpsilon = 1e-12;
+	GeoPrefilterEnvelope env;
+	env.latRadiusDeg = metersToDegrees(distanceMeters);
+	const double maxAbsLat = std::min(90.0, std::abs(center.Y()) + env.latRadiusDeg);
+	const double maxAbsLatRad = maxAbsLat * kDegToRad;
+	const double cosAtMaxAbsLat = std::abs(std::cos(maxAbsLatRad));
+	env.lonRadiusDeg = cosAtMaxAbsLat <= kCosEpsilon ? 180.0 : std::min(180.0, env.latRadiusDeg / cosAtMaxAbsLat);
+	env.circleRadiusDeg = std::hypot(env.latRadiusDeg, env.lonRadiusDeg);
+	env.requiresFullScan = !std::isfinite(env.circleRadiusDeg) || env.circleRadiusDeg >= 180.0;
+	return env;
 }
 void validateGeoPoint(Point p, std::string_view context) {
 	if (!isValidLongitude(p.X()) || !isValidLatitude(p.Y())) {
@@ -112,16 +136,24 @@ SelectKeyResults IndexRTree<KeyEntryT, Splitter, MaxEntries, MinEntries>::Select
 			std::unordered_set<Point, std::hash<Point>, point_strict_equal> visitedPoints_;
 			size_t idsCount_ = 0;
 		} geoVisitor{sortId, selectCtx.opts.distinct, selectCtx.opts.itemsCountInNamespace, res, point, distance};
-		const double degRadius = metersToDegrees(distance);
-		this->idx_map.DWithin(point, degRadius, geoVisitor);
-		// Handle antimeridian wrap-around for GIS longitudes.
-		const double minLon = point.X() - degRadius;
-		const double maxLon = point.X() + degRadius;
-		if (minLon < -180.0) {
-			this->idx_map.DWithin(Point{point.X() + 360.0, point.Y()}, degRadius, geoVisitor);
-		}
-		if (maxLon > 180.0) {
-			this->idx_map.DWithin(Point{point.X() - 360.0, point.Y()}, degRadius, geoVisitor);
+		const GeoPrefilterEnvelope env = buildGeoPrefilterEnvelope(point, distance);
+		if (env.requiresFullScan) {
+			for (const auto& v : this->idx_map) {
+				if (geoVisitor(v)) {
+					break;
+				}
+			}
+		} else {
+			this->idx_map.DWithin(point, env.circleRadiusDeg, geoVisitor);
+			// Handle antimeridian wrap-around for GIS longitudes.
+			const double minLon = point.X() - env.lonRadiusDeg;
+			const double maxLon = point.X() + env.lonRadiusDeg;
+			if (minLon < -180.0) {
+				this->idx_map.DWithin(Point{point.X() + 360.0, point.Y()}, env.circleRadiusDeg, geoVisitor);
+			}
+			if (maxLon > 180.0) {
+				this->idx_map.DWithin(Point{point.X() - 360.0, point.Y()}, env.circleRadiusDeg, geoVisitor);
+			}
 		}
 		// NOTE: Fallback to generic comparator is intentionally disabled for GIS mode,
 		// because generic DWithin comparator works in planar coordinates and may produce
