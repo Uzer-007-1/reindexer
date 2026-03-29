@@ -163,6 +163,7 @@ type TestItemGeom struct {
 	PointRTreeQuadratic reindexer.Point `reindex:"point_rtree_quadratic,rtree,quadratic"`
 	PointRTreeGreene    reindexer.Point `reindex:"point_rtree_greene,rtree,greene"`
 	PointRTreeRStar     reindexer.Point `reindex:"point_rtree_rstar,rtree,rstar"`
+	PointGISRStar       reindexer.Point `reindex:"point_gis_rstar,gis,rstar"`
 	PointNonIndex       reindexer.Point `json:"point_non_index"`
 }
 
@@ -455,6 +456,7 @@ func newTestItemGeom(id int, pkgsCount int) interface{} {
 		PointRTreeQuadratic: randPoint(),
 		PointRTreeGreene:    randPoint(),
 		PointRTreeRStar:     randPoint(),
+		PointGISRStar:       randPoint(),
 		PointNonIndex:       randPoint(),
 	}
 }
@@ -1189,6 +1191,7 @@ func CheckTestItemsGeomQueries(t *testing.T) {
 	newTestQuery(DB, testItemsGeomNs).DWithin("point_rtree_quadratic", randPoint(), randFloat(0, 2)).ExecAndVerify(t)
 	newTestQuery(DB, testItemsGeomNs).DWithin("point_rtree_greene", randPoint(), randFloat(0, 2)).ExecAndVerify(t)
 	newTestQuery(DB, testItemsGeomNs).DWithin("point_rtree_rstar", randPoint(), randFloat(0, 2)).ExecAndVerify(t)
+	newTestQuery(DB, testItemsGeomNs).DWithin("point_gis_rstar", randPoint(), randFloat(0, 2)).ExecAndVerify(t)
 }
 
 func CheckTestItemsSQLQueries(t *testing.T) {
@@ -1504,6 +1507,98 @@ func TestSTDistanceWrappers(t *testing.T) {
 			require.Equal(t, string(it1), string(it2))
 		}
 	})
+}
+
+func TestSTGeoDistanceWrappers(t *testing.T) {
+	t.Parallel()
+
+	const ns = testItemsStDistanceNs
+	const (
+		field1 = "point_gis_rstar"
+		field2 = "point_rtree_linear"
+	)
+	FillTestItemsWithFunc(ns, 0, 10000, 0, newTestItemGeomSimple)
+
+	t.Run("ST_GeoDistance between field and point", func(t *testing.T) {
+		for i := 0; i < 10; i++ {
+			searchPoint := randPoint()
+			distanceMeters := randFloat(0, 100000)
+			sortPoint := randPoint()
+			it1, err := DBD.Query(ns).DWithinGeo(field1, searchPoint, distanceMeters).SortStGeoPointDistance(field1, sortPoint, false).
+				ExecToJson().FetchAll()
+			require.NoError(t, err)
+			it2, err := DBD.Query(ns).DWithinGeo(field1, searchPoint, distanceMeters).Sort(fmt.Sprintf("ST_GeoDistance(%s, ST_GeomFromText('point(%s %s)'))",
+				field1, strconv.FormatFloat(sortPoint[0], 'f', -1, 64), strconv.FormatFloat(sortPoint[1], 'f', -1, 64)), false).
+				ExecToJson().FetchAll()
+			require.NoError(t, err)
+			require.Equal(t, string(it1), string(it2))
+		}
+	})
+
+	t.Run("ST_GeoDistance between fields", func(t *testing.T) {
+		for i := 0; i < 10; i++ {
+			searchPoint := randPoint()
+			distanceMeters := randFloat(0, 100000)
+			it1, err := DBD.Query(ns).DWithinGeo(field1, searchPoint, distanceMeters).SortStGeoFieldDistance(field1, field2, true).ExecToJson().FetchAll()
+			require.NoError(t, err)
+			it2, err := DBD.Query(ns).DWithinGeo(field1, searchPoint, distanceMeters).Sort(fmt.Sprintf("ST_GeoDistance(%s, %s)", field1, field2), true).ExecToJson().FetchAll()
+			require.NoError(t, err)
+			require.Equal(t, string(it1), string(it2))
+		}
+	})
+}
+
+func TestSTDistanceOnGISUsesMetersSemantics(t *testing.T) {
+	t.Parallel()
+
+	const ns = testItemsStDistanceNs
+	const field = "point_gis_rstar"
+	FillTestItemsWithFunc(ns, 0, 10000, 0, newTestItemGeomSimple)
+
+	for i := 0; i < 10; i++ {
+		searchPoint := randPoint()
+		distanceMeters := randFloat(0, 100000)
+		sortPoint := randPoint()
+
+		it1, err := DBD.Query(ns).DWithinGeo(field, searchPoint, distanceMeters).SortStPointDistance(field, sortPoint, false).
+			ExecToJson().FetchAll()
+		require.NoError(t, err)
+		it2, err := DBD.Query(ns).DWithinGeo(field, searchPoint, distanceMeters).SortStGeoPointDistance(field, sortPoint, false).
+			ExecToJson().FetchAll()
+		require.NoError(t, err)
+		require.Equal(t, string(it2), string(it1))
+	}
+
+	const otherField = "point_rtree_linear"
+	for i := 0; i < 10; i++ {
+		searchPoint := randPoint()
+		distanceMeters := randFloat(0, 100000)
+
+		it1, err := DBD.Query(ns).DWithinGeo(field, searchPoint, distanceMeters).SortStFieldDistance(field, otherField, true).ExecToJson().FetchAll()
+		require.NoError(t, err)
+		it2, err := DBD.Query(ns).DWithinGeo(field, searchPoint, distanceMeters).SortStGeoFieldDistance(field, otherField, true).ExecToJson().FetchAll()
+		require.NoError(t, err)
+		require.Equal(t, string(it2), string(it1))
+	}
+}
+
+func TestSTDWithinOnGISUsesGeodesicSemantics(t *testing.T) {
+	t.Parallel()
+
+	const ns = testItemsStDistanceNs
+	const field = "point_gis_rstar"
+	FillTestItemsWithFunc(ns, 0, 10000, 0, newTestItemGeomSimple)
+
+	for i := 0; i < 10; i++ {
+		searchPoint := randPoint()
+		distanceMeters := randFloat(0, 100000)
+
+		it1, err := DBD.Query(ns).DWithin(field, searchPoint, distanceMeters).ExecToJson().FetchAll()
+		require.NoError(t, err)
+		it2, err := DBD.Query(ns).DWithinGeo(field, searchPoint, distanceMeters).ExecToJson().FetchAll()
+		require.NoError(t, err)
+		require.Equal(t, string(it2), string(it1))
+	}
 }
 
 func TestWALQueries(t *testing.T) {

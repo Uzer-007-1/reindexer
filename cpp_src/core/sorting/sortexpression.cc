@@ -20,6 +20,9 @@ RX_NO_INLINE void throwParseError(std::string_view sortExpr, int pos, std::strin
 inline double distance(reindexer::Point p1, reindexer::Point p2) noexcept {
 	return std::sqrt((p1.X() - p2.X()) * (p1.X() - p2.X()) + (p1.Y() - p2.Y()) * (p1.Y() - p2.Y()));
 }
+inline double distance(reindexer::Point p1, reindexer::Point p2, bool geo) noexcept {
+	return geo ? reindexer::GeoDistanceMeters(p1, p2) : distance(p1, p2);
+}
 
 reindexer::VariantArray getFieldValues(reindexer::ConstPayload pv, reindexer::TagsMatcher& tagsMatcher, int index,
 									   std::string_view column) {
@@ -126,12 +129,12 @@ double SortExprFuncs::ProxiedField::GetValue(ConstPayload pv, TagsMatcher& tagsM
 
 double DistanceFromPoint::GetValue(ConstPayload pv, TagsMatcher& tagsMatcher) const {
 	const VariantArray values = getFieldValues(pv, tagsMatcher, index, column);
-	return distance(static_cast<Point>(values), point);
+	return distance(static_cast<Point>(values), point, geo);
 }
 
 double ProxiedDistanceFromPoint::GetValue(ConstPayload pv, TagsMatcher& tagsMatcher) const {
 	const VariantArray values = getJsonFieldValues(pv, tagsMatcher, json);
-	return distance(static_cast<Point>(values), point);
+	return distance(static_cast<Point>(values), point, geo);
 }
 
 double JoinedIndex::GetValue(IdType rowId, const joins::NamespaceResults& joinResults,
@@ -149,19 +152,19 @@ double JoinedIndex::GetValue(IdType rowId, const joins::NamespaceResults& joinRe
 double DistanceJoinedIndexFromPoint::GetValue(IdType rowId, const joins::NamespaceResults& joinResults,
 											  const std::vector<JoinedSelector>& joinedSelectors) const {
 	const VariantArray values = SortExpression::GetJoinedFieldValues(rowId, joinResults, joinedSelectors, nsIdx, column, index);
-	return distance(static_cast<Point>(values), point);
+	return distance(static_cast<Point>(values), point, geo);
 }
 
 double DistanceBetweenIndexes::GetValue(ConstPayload pv, TagsMatcher& tagsMatcher) const {
 	const VariantArray values1 = getFieldValues(pv, tagsMatcher, index1, column1);
 	const VariantArray values2 = getFieldValues(pv, tagsMatcher, index2, column2);
-	return distance(static_cast<Point>(values1), static_cast<Point>(values2));
+	return distance(static_cast<Point>(values1), static_cast<Point>(values2), geo);
 }
 
 double ProxiedDistanceBetweenFields::GetValue(ConstPayload pv, TagsMatcher& tagsMatcher) const {
 	const VariantArray values1 = getJsonFieldValues(pv, tagsMatcher, json1);
 	const VariantArray values2 = getJsonFieldValues(pv, tagsMatcher, json2);
-	return distance(static_cast<Point>(values1), static_cast<Point>(values2));
+	return distance(static_cast<Point>(values1), static_cast<Point>(values2), geo);
 }
 
 double DistanceBetweenIndexAndJoinedIndex::GetValue(ConstPayload pv, TagsMatcher& tagsMatcher, IdType rowId,
@@ -169,14 +172,14 @@ double DistanceBetweenIndexAndJoinedIndex::GetValue(ConstPayload pv, TagsMatcher
 													const std::vector<JoinedSelector>& joinedSelectors) const {
 	const VariantArray values1 = getFieldValues(pv, tagsMatcher, index, column);
 	const VariantArray values2 = SortExpression::GetJoinedFieldValues(rowId, joinResults, joinedSelectors, jNsIdx, jColumn, jIndex);
-	return distance(static_cast<Point>(values1), static_cast<Point>(values2));
+	return distance(static_cast<Point>(values1), static_cast<Point>(values2), geo);
 }
 
 double DistanceBetweenJoinedIndexes::GetValue(IdType rowId, const joins::NamespaceResults& joinResults,
 											  const std::vector<JoinedSelector>& joinedSelectors) const {
 	const VariantArray values1 = SortExpression::GetJoinedFieldValues(rowId, joinResults, joinedSelectors, nsIdx1, column1, index1);
 	const VariantArray values2 = SortExpression::GetJoinedFieldValues(rowId, joinResults, joinedSelectors, nsIdx2, column2, index2);
-	return distance(static_cast<Point>(values1), static_cast<Point>(values2));
+	return distance(static_cast<Point>(values1), static_cast<Point>(values2), geo);
 }
 
 double DistanceBetweenJoinedIndexesSameNs::GetValue(IdType rowId, const joins::NamespaceResults& joinResults,
@@ -205,7 +208,7 @@ double DistanceBetweenJoinedIndexesSameNs::GetValue(IdType rowId, const joins::N
 	} else {
 		pv.Get(index2, values2);
 	}
-	return distance(static_cast<Point>(values1), static_cast<Point>(values2));
+	return distance(static_cast<Point>(values1), static_cast<Point>(values2), geo);
 }
 
 template <typename T>
@@ -298,7 +301,7 @@ static Point parsePoint(std::string_view& expr, std::string_view funcName, std::
 												   0.0, 0.0, nullptr, nullptr};
 	if (funcName != "st_geomfromtext") {
 		throwParseError(fullExpr, expr.data() - fullExpr.data(),
-						"Unsupported function inside ST_Distance() : '" + std::string(funcName) + "'.");
+						"Unsupported function inside ST_Distance()/ST_GeoDistance() : '" + std::string(funcName) + "'.");
 	}
 	expr.remove_prefix(1);
 	skipSpaces();
@@ -351,7 +354,7 @@ static Point parsePoint(std::string_view& expr, std::string_view funcName, std::
 
 template <typename T, typename SkipSW>
 void SortExpression::parseDistance(std::string_view& expr, const std::vector<T>& joinedSelectors, const std::string_view fullExpr,
-								   const ArithmeticOpType op, const bool negative, const SkipSW& skipSpaces) {
+								   const ArithmeticOpType op, const bool negative, const bool geo, const SkipSW& skipSpaces) {
 	skipSpaces();
 	const auto parsedIndexName1 = parseIndexName(expr, joinedSelectors, fullExpr);
 	skipSpaces();
@@ -369,21 +372,21 @@ void SortExpression::parseDistance(std::string_view& expr, const std::vector<T>&
 					throwParseError(fullExpr, expr.data() - fullExpr.data(), "Distance between two identical indexes");
 				}
 				std::ignore = Append({op, negative}, DistanceBetweenJoinedIndexesSameNs{jNsIdx1, std::move(parsedIndexName1.name),
-																						std::move(parsedIndexName2.name)});
+																						std::move(parsedIndexName2.name), geo});
 			} else {
 				std::ignore = Append({op, negative}, DistanceBetweenJoinedIndexes{
 														 jNsIdx1, std::move(parsedIndexName1.name),
 														 static_cast<size_t>(parsedIndexName2.joinedSelectorIt - joinedSelectors.cbegin()),
-														 std::move(parsedIndexName2.name)});
+														 std::move(parsedIndexName2.name), geo});
 			}
 		} else {
 			skipSpaces();
 			if (!expr.empty() && expr[0] == '(') {
 				const auto point = parsePoint(expr, toLower(parsedIndexName2.name), fullExpr, skipSpaces);
-				std::ignore = Append({op, negative}, DistanceJoinedIndexFromPoint{jNsIdx1, std::move(parsedIndexName1.name), point});
+				std::ignore = Append({op, negative}, DistanceJoinedIndexFromPoint{jNsIdx1, std::move(parsedIndexName1.name), point, geo});
 			} else {
 				std::ignore = Append({op, negative}, DistanceBetweenIndexAndJoinedIndex{std::move(parsedIndexName2.name), jNsIdx1,
-																						std::move(parsedIndexName1.name)});
+																						std::move(parsedIndexName1.name), geo});
 			}
 		}
 	} else if (!expr.empty() && expr[0] == '(') {
@@ -402,9 +405,9 @@ void SortExpression::parseDistance(std::string_view& expr, const std::vector<T>&
 		if (parsedIndexName2.joinedSelectorIt != joinedSelectors.cend()) {
 			std::ignore = Append({op, negative}, DistanceJoinedIndexFromPoint{
 													 static_cast<size_t>(parsedIndexName2.joinedSelectorIt - joinedSelectors.cbegin()),
-													 std::move(parsedIndexName2.name), point});
+													 std::move(parsedIndexName2.name), point, geo});
 		} else {
-			std::ignore = Append({op, negative}, DistanceFromPoint{std::move(parsedIndexName2.name), point});
+			std::ignore = Append({op, negative}, DistanceFromPoint{std::move(parsedIndexName2.name), point, geo});
 		}
 	} else {
 		if (expr.empty() || expr[0] != ',') {
@@ -417,18 +420,18 @@ void SortExpression::parseDistance(std::string_view& expr, const std::vector<T>&
 			std::ignore = Append({op, negative}, DistanceBetweenIndexAndJoinedIndex{
 													 std::move(parsedIndexName1.name),
 													 static_cast<size_t>(parsedIndexName2.joinedSelectorIt - joinedSelectors.cbegin()),
-													 std::move(parsedIndexName2.name)});
+													 std::move(parsedIndexName2.name), geo});
 		} else {
 			skipSpaces();
 			if (!expr.empty() && expr[0] == '(') {
 				const auto point = parsePoint(expr, toLower(parsedIndexName2.name), fullExpr, skipSpaces);
-				std::ignore = Append({op, negative}, DistanceFromPoint{std::move(parsedIndexName1.name), point});
+				std::ignore = Append({op, negative}, DistanceFromPoint{std::move(parsedIndexName1.name), point, geo});
 			} else {
 				if (iequals(parsedIndexName1.name, parsedIndexName2.name)) {
 					throwParseError(fullExpr, expr.data() - fullExpr.data(), "Distance between two identical indexes");
 				}
 				std::ignore =
-					Append({op, negative}, DistanceBetweenIndexes{std::move(parsedIndexName1.name), std::move(parsedIndexName2.name)});
+					Append({op, negative}, DistanceBetweenIndexes{std::move(parsedIndexName1.name), std::move(parsedIndexName2.name), geo});
 			}
 		}
 	}
@@ -578,8 +581,8 @@ std::string_view SortExpression::parse(std::string_view expr, bool* containIndex
 								OpenBracket({op, negative}, true);
 								expr = parse(expr, containIndexOrFunction, isRrf, fullExpr, joinedSelectors);
 								CloseBracket();
-							} else if (funcName == "st_distance"sv) {
-								parseDistance(expr, joinedSelectors, fullExpr, op, negative, skipSpaces);
+							} else if (funcName == "st_distance"sv || funcName == "st_geodistance"sv) {
+								parseDistance(expr, joinedSelectors, fullExpr, op, negative, funcName == "st_geodistance"sv, skipSpaces);
 							} else if (funcName == "hash") {
 								skipSpaces();
 								uint32_t seed = 0;
@@ -828,11 +831,11 @@ void ProxiedSortExpression::fill(SortExpression::const_iterator it, SortExpressi
 			[&](const RankNamed& r) { std::ignore = Append(it->operation, r); },
 			[&](const SortExprFuncs::SortHash& sh) { std::ignore = Append(it->operation, sh); },
 			[&](const DistanceFromPoint& i) {
-				std::ignore = Append<ProxiedDistanceFromPoint>(it->operation, getJsonPath(i.column, i.index, ns), i.point);
+				std::ignore = Append<ProxiedDistanceFromPoint>(it->operation, getJsonPath(i.column, i.index, ns), i.point, i.geo);
 			},
 			[&](const DistanceBetweenIndexes& i) {
 				std::ignore = Append<ProxiedDistanceBetweenFields>(it->operation, getJsonPath(i.column1, i.index1, ns),
-																   getJsonPath(i.column2, i.index2, ns));
+																   getJsonPath(i.column2, i.index2, ns), i.geo);
 			});
 	}
 }
@@ -1348,20 +1351,26 @@ void SortExpression::dump(const_iterator begin, const_iterator end, WrSerializer
 			[&ser](const Rrf& r) { ser << "RRF(rank_const="sv << r.RankConst() << ')'; },
 			[&ser](const SortExprFuncs::SortHash& sh) { ser << "hash("sv << (sh.IsUserSeed() ? std::to_string(sh.Seed()) : ""sv) << ')'; },
 			[&ser](const DistanceFromPoint& i) {
-				ser << "ST_Distance("sv << i.column << ", ["sv << i.point.X() << ", "sv << i.point.Y() << "])"sv;
+				ser << (i.geo ? "ST_GeoDistance("sv : "ST_Distance("sv) << i.column << ", ["sv << i.point.X() << ", "sv << i.point.Y()
+					<< "])"sv;
 			},
 			[&ser](const DistanceJoinedIndexFromPoint& i) {
-				ser << "ST_Distance(joined "sv << i.nsIdx << ' ' << i.column << ", ["sv << i.point.X() << ", "sv << i.point.Y() << "])"sv;
+				ser << (i.geo ? "ST_GeoDistance(joined "sv : "ST_Distance(joined "sv) << i.nsIdx << ' ' << i.column << ", ["sv << i.point.X()
+					<< ", "sv << i.point.Y() << "])"sv;
 			},
-			[&ser](const DistanceBetweenIndexes& i) { ser << "ST_Distance("sv << i.column1 << ", "sv << i.column2 << ')'; },
+			[&ser](const DistanceBetweenIndexes& i) {
+				ser << (i.geo ? "ST_GeoDistance("sv : "ST_Distance("sv) << i.column1 << ", "sv << i.column2 << ')';
+			},
 			[&ser](const DistanceBetweenIndexAndJoinedIndex& i) {
-				ser << "ST_Distance("sv << i.column << ", joined "sv << i.jNsIdx << ' ' << i.jColumn << ')';
+				ser << (i.geo ? "ST_GeoDistance("sv : "ST_Distance("sv) << i.column << ", joined "sv << i.jNsIdx << ' ' << i.jColumn << ')';
 			},
 			[&ser](const DistanceBetweenJoinedIndexes& i) {
-				ser << "ST_Distance(joined "sv << i.nsIdx1 << ' ' << i.column1 << ", joined "sv << i.nsIdx2 << ' ' << i.column2 << ')';
+				ser << (i.geo ? "ST_GeoDistance(joined "sv : "ST_Distance(joined "sv) << i.nsIdx1 << ' ' << i.column1 << ", joined "sv
+					<< i.nsIdx2 << ' ' << i.column2 << ')';
 			},
 			[&ser](const DistanceBetweenJoinedIndexesSameNs& i) {
-				ser << "ST_Distance(joined "sv << i.nsIdx << ' ' << i.column1 << ", joined "sv << i.nsIdx << ' ' << i.column2 << ')';
+				ser << (i.geo ? "ST_GeoDistance(joined "sv : "ST_Distance(joined "sv) << i.nsIdx << ' ' << i.column1 << ", joined "sv
+					<< i.nsIdx << ' ' << i.column2 << ')';
 			});
 		if (it->operation.negative) {
 			ser << ')';
@@ -1409,9 +1418,12 @@ void ProxiedSortExpression::dump(const_iterator begin, const_iterator end, WrSer
 			[&ser](const Rank&) { ser << "rank()"sv; }, [&ser](const RankNamed& r) { ser << "rank("sv << r.IndexName() << ')'; },
 			[&ser](const SortExprFuncs::SortHash& sh) { ser << "hash("sv << (sh.IsUserSeed() ? std::to_string(sh.Seed()) : ""sv) << ')'; },
 			[&ser](const ProxiedDistanceFromPoint& i) {
-				ser << "ST_Distance("sv << i.json << ", ["sv << i.point.X() << ", "sv << i.point.Y() << "])"sv;
+				ser << (i.geo ? "ST_GeoDistance("sv : "ST_Distance("sv) << i.json << ", ["sv << i.point.X() << ", "sv << i.point.Y()
+					<< "])"sv;
 			},
-			[&ser](const ProxiedDistanceBetweenFields& i) { ser << "ST_Distance("sv << i.json2 << ", "sv << i.json2 << ')'; });
+			[&ser](const ProxiedDistanceBetweenFields& i) {
+				ser << (i.geo ? "ST_GeoDistance("sv : "ST_Distance("sv) << i.json1 << ", "sv << i.json2 << ')';
+			});
 		if (it->operation.negative) {
 			ser << ')';
 		}

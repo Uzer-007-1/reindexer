@@ -579,6 +579,9 @@ void QueriesApi::CheckSqlQueries() {
 	checkSqlQuery(fmt::format("SELECT * FROM {} WHERE ST_DWithin({}, {}, {});", geomNs, kFieldNamePointNonIndex, pointToSQL(point),
 							  toString(distance)),
 				  Query(geomNs).DWithin(kFieldNamePointNonIndex, point, distance));
+	checkSqlQuery(fmt::format("SELECT * FROM {} WHERE ST_DWithin({}, {}, {});", geomNs, kFieldNamePointNonIndex, pointToSQL(point),
+							  toString(distance)),
+				  Query(geomNs).DWithinGeo(kFieldNamePointNonIndex, point, distance));
 
 	point = randPoint(10);
 	distance = randBin<double>(0, 1);
@@ -587,6 +590,27 @@ void QueriesApi::CheckSqlQueries() {
 				  Query(geomNs)
 					  .DWithin(kFieldNamePointNonIndex, point, distance)
 					  .Sort(std::string("ST_Distance(") + kFieldNamePointLinearRTree + ", " + pointToSQL(point) + ')', false));
+
+	checkSqlQuery(fmt::format("SELECT * FROM {} ORDER BY 'ST_GeoDistance({}, {})';", geomNs, kFieldNamePointLinearRTree,
+							  pointToSQL(point, true)),
+				  Query(geomNs).SortStGeoDistance(kFieldNamePointLinearRTree, point, false));
+
+	point = randPoint(10);
+	distance = randBin<double>(0, 1);
+	checkSqlQuery(fmt::format("SELECT * FROM {} WHERE ST_DWithin({}, {}, {});", geomNs, kFieldNamePointGisRStar, pointToSQL(point),
+							  toString(distance)),
+				  Query(geomNs).DWithin(kFieldNamePointGisRStar, point, distance));
+	checkSqlQuery(fmt::format("SELECT * FROM {} WHERE ST_DWithin({}, {}, {});", geomNs, kFieldNamePointGisRStar, pointToSQL(point),
+							  toString(distance)),
+				  Query(geomNs).DWithinGeo(kFieldNamePointGisRStar, point, distance));
+	checkSqlQuery(fmt::format("SELECT * FROM {} WHERE ST_DWithin({}, {}, {}) ORDER BY 'ST_Distance({}, {})';", geomNs,
+							  kFieldNamePointGisRStar, pointToSQL(point), toString(distance), kFieldNamePointGisRStar,
+							  pointToSQL(point, true)),
+				  Query(geomNs).DWithin(kFieldNamePointGisRStar, point, distance).SortStDistance(kFieldNamePointGisRStar, point, false));
+	checkSqlQuery(fmt::format("SELECT * FROM {} WHERE ST_DWithin({}, {}, {}) ORDER BY 'ST_GeoDistance({}, {})';", geomNs,
+							  kFieldNamePointGisRStar, pointToSQL(point), toString(distance), kFieldNamePointGisRStar,
+							  pointToSQL(point, true)),
+				  Query(geomNs).DWithinGeo(kFieldNamePointGisRStar, point, distance).SortStGeoDistance(kFieldNamePointGisRStar, point, false));
 
 	checkSqlQuery(fmt::format("SELECT * FROM {} WHERE {} >= {};", default_namespace, kFieldNameGenre, kFieldNameRate),
 				  Query(default_namespace).WhereBetweenFields(kFieldNameGenre, CondGe, kFieldNameRate));

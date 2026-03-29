@@ -23,6 +23,12 @@ ArithmeticOpType operation(char ch) {
 	}
 }
 
+TEST(SortExpression, ParseGeoDistance) {
+	const auto parsed = SortExpression::Parse("ST_GeoDistance(point1, ST_GeomFromText('point(0 0)'))", {});
+	EXPECT_EQ(parsed.Dump(), "ST_GeoDistance(point1, [0, 0])");
+	EXPECT_THROW((void)SortExpression::Parse("ST_GeoDistance(point1, point1)", {}), reindexer::Error);
+}
+
 struct [[nodiscard]] RankFunction {
 } Rank;
 struct [[nodiscard]] RankNamed {
@@ -330,6 +336,7 @@ TEST(StringFunctions, SortExpressionParse) {
 		{"ST_Distance(point, ST_GeomFromText('point(1.25 -3.5)')", {}, FAIL},
 		{"ST_Distance(point, ST_GeomFromText('point(1.25, -3.5)'))", {}, FAIL},
 		{"ST_Distance(ST_GeomFromText('point(0.5 5.5)'), ST_GeomFromText('point(1.25 -3.5)'))", {}, FAIL},
+		{"ST_GeoDistance(point1, point1)", {}, FAIL},
 		{"ST_Distance(point1, point2)", {}, makeExpr(Distance("point1", "point2"))},
 		{"ST_Distance(point1, ns.point2)", {"ns"}, makeExpr(Distance("point1", 0, "point2"))},
 		{"ST_Distance(ns.point1, point2)", {"ns"}, makeExpr(Distance("point2", 0, "point1"))},

@@ -214,6 +214,8 @@ public:
 	}
 
 	/// Adds geospatial condition to find all points near target 'p' within the 'distance'.
+	/// For 'rtree' indexes distance is interpreted in planar coordinate units;
+	/// for 'gis' indexes it is interpreted in meters with geodesic WGS84 semantics.
 	/// @param field - geospatial index name.
 	/// @param p - point, that will be treat as the center of the boarding circle.
 	/// @param distance - distance of the search (radius of the boarding circle).
@@ -228,14 +230,43 @@ public:
 	[[nodiscard]] Query&& DWithin(Str&& field, Point p, double distance) && {
 		return std::move(DWithin(std::forward<Str>(field), p, distance));
 	}
+	/// GIS alias for DWithin with WGS84 validation and distance in meters.
+	template <concepts::ConvertibleToString Str>
+	Query& DWithinGeo(Str&& field, Point p, double distanceMeters) & {
+		if (distanceMeters < 0) [[unlikely]] {
+			throw Error(errParams, "Distance for DWithinGeo can not be negative");
+		}
+		if (p.X() < -180.0 || p.X() > 180.0 || p.Y() < -90.0 || p.Y() > 90.0) [[unlikely]] {
+			throw Error(errParams, "Invalid GIS point for DWithinGeo: [{} {}]", p.X(), p.Y());
+		}
+		return DWithin(std::forward<Str>(field), p, distanceMeters);
+	}
+	template <concepts::ConvertibleToString Str>
+	[[nodiscard]] Query&& DWithinGeo(Str&& field, Point p, double distanceMeters) && {
+		return std::move(DWithinGeo(std::forward<Str>(field), p, distanceMeters));
+	}
 
 	/// Adds nested query and applies geospatial condition to it's results.
+	/// Uses the same distance semantics as DWithin(): planar for 'rtree', geodesic meters for 'gis'.
 	/// @param q - nested query, that has to return some sequence of points.
 	/// @param p - point, that will be treat as the center of the boarding circle.
 	/// @param distance - distance of the search (radius of the boarding circle).
 	/// @return Query object ready to be executed.
 	Query& DWithin(Query&& q, Point p, double distance) & { return Where(std::move(q), CondDWithin, VariantArray::Create(p, distance)); }
 	[[nodiscard]] Query&& DWithin(Query&& q, Point p, double distance) && { return std::move(DWithin(std::move(q), p, distance)); }
+	/// GIS alias for nested DWithin with WGS84 validation and distance in meters.
+	Query& DWithinGeo(Query&& q, Point p, double distanceMeters) & {
+		if (distanceMeters < 0) [[unlikely]] {
+			throw Error(errParams, "Distance for DWithinGeo can not be negative");
+		}
+		if (p.X() < -180.0 || p.X() > 180.0 || p.Y() < -90.0 || p.Y() > 90.0) [[unlikely]] {
+			throw Error(errParams, "Invalid GIS point for DWithinGeo: [{} {}]", p.X(), p.Y());
+		}
+		return DWithin(std::move(q), p, distanceMeters);
+	}
+	[[nodiscard]] Query&& DWithinGeo(Query&& q, Point p, double distanceMeters) && {
+		return std::move(DWithinGeo(std::move(q), p, distanceMeters));
+	}
 
 	/// Adds a condition with a user-defined function.
 	/// @param function - function object used in condition clause.
@@ -687,7 +718,9 @@ public:
 		return std::move(Sort(std::forward<Str>(sort), desc));
 	}
 
-	/// Performs sorting by ST_Distance() expressions for geometry index. Sorting function will use distance between field and target point.
+	/// Performs sorting by ST_Distance() expressions for geometry-like index.
+	/// For 'rtree' indexes returns planar distance in index units; for 'gis' indexes returns geodesic distance in meters.
+	/// Sorting function will use distance between field and target point.
 	/// @param field - field's name. This field must contain Point.
 	/// @param p - target point.
 	/// @param desc - is sorting direction descending or ascending.
@@ -696,7 +729,9 @@ public:
 	[[nodiscard]] Query&& SortStDistance(std::string_view field, reindexer::Point p, bool desc) && {
 		return std::move(SortStDistance(field, p, desc));
 	}
-	/// Performs sorting by ST_Distance() expressions for geometry index. Sorting function will use distance 2 fields.
+	/// Performs sorting by ST_Distance() expressions for geometry-like indexes.
+	/// For 'rtree' indexes returns planar distance in index units; for 'gis' indexes returns geodesic distance in meters.
+	/// Sorting function will use distance between 2 fields.
 	/// @param field1 - first field name. This field must contain Point.
 	/// @param field2 - second field name.This field must contain Point.
 	/// @param desc - is sorting direction descending or ascending.
@@ -704,6 +739,26 @@ public:
 	Query& SortStDistance(std::string_view field1, std::string_view field2, bool desc) &;
 	[[nodiscard]] Query&& SortStDistance(std::string_view field1, std::string_view field2, bool desc) && {
 		return std::move(SortStDistance(field1, field2, desc));
+	}
+	/// Performs sorting by ST_GeoDistance() expressions for GIS (WGS84) geometry.
+	/// Sorting function will use geodesic distance (meters) between field and target point.
+	/// @param field - field's name. This field must contain Point.
+	/// @param p - target point.
+	/// @param desc - is sorting direction descending or ascending.
+	/// @return Query object.
+	Query& SortStGeoDistance(std::string_view field, reindexer::Point p, bool desc) &;
+	[[nodiscard]] Query&& SortStGeoDistance(std::string_view field, reindexer::Point p, bool desc) && {
+		return std::move(SortStGeoDistance(field, p, desc));
+	}
+	/// Performs sorting by ST_GeoDistance() expressions for GIS (WGS84) geometry.
+	/// Sorting function will use geodesic distance (meters) between 2 fields.
+	/// @param field1 - first field name. This field must contain Point.
+	/// @param field2 - second field name.This field must contain Point.
+	/// @param desc - is sorting direction descending or ascending.
+	/// @return Query object.
+	Query& SortStGeoDistance(std::string_view field1, std::string_view field2, bool desc) &;
+	[[nodiscard]] Query&& SortStGeoDistance(std::string_view field1, std::string_view field2, bool desc) && {
+		return std::move(SortStGeoDistance(field1, field2, desc));
 	}
 
 	/// Performs sorting by certain column. Analog to sql ORDER BY.

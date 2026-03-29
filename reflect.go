@@ -28,16 +28,18 @@ var collateModes = map[string]int{
 }
 
 type indexOptions struct {
-	isArray     bool
-	isAppenable bool
-	isDense     bool
-	isNoColumn  bool
-	isPk        bool
-	isSparse    bool
-	rtreeType   string
-	isUuid      bool
-	isJoined    bool
-	isComposite bool
+	isArray      bool
+	isAppenable  bool
+	isDense      bool
+	isNoColumn   bool
+	isPk         bool
+	isSparse     bool
+	rtreeType    string
+	crs          string
+	distanceUnit string
+	isUuid       bool
+	isJoined     bool
+	isComposite  bool
 }
 
 func parseRxTags(field reflect.StructField) (idxName string, idxType string, idxSettings []string) {
@@ -207,9 +209,10 @@ func parseIndexesImpl(indexDefs *[]bindings.IndexDef, st reflect.Type, subArray 
 			return fmt.Errorf("no index name is specified for primary key in field '%s'; jsonpath: '%s'", field.Name, jsonPath)
 		}
 
-		if idxType == "rtree" {
+		if idxType == "rtree" || idxType == "gis" {
 			if t.Kind() != reflect.Array || t.Len() != 2 || t.Elem().Kind() != reflect.Float64 {
-				return fmt.Errorf("'rtree' index allowed only for [2]float64 or reindexer.Point field type (index name: '%s', field name: '%s', jsonpath: '%s')",
+				return fmt.Errorf("'%s' index allowed only for [2]float64 or reindexer.Point field type (index name: '%s', field name: '%s', jsonpath: '%s')",
+					idxType,
 					reindexPath, field.Name, jsonPath)
 			}
 		}
@@ -313,11 +316,29 @@ func parseIndexesImpl(indexDefs *[]bindings.IndexDef, st reflect.Type, subArray 
 			}
 		} else if len(idxName) > 0 {
 			collateMode, sortOrderLetters := parseCollate(&idxSettings)
+			opts.crs = peekNamedOption("crs", &idxSettings)
+			opts.distanceUnit = peekNamedOption("distance_unit", &idxSettings)
 			var fieldType string
-			if idxType == "rtree" {
+			if idxType == "rtree" || idxType == "gis" {
 				fieldType = "point"
 			} else if fieldType, err = getFieldType(t); err != nil {
 				return err
+			}
+			if idxType == "gis" {
+				if opts.crs == "" {
+					opts.crs = "wgs84"
+				}
+				if opts.distanceUnit == "" {
+					opts.distanceUnit = "m"
+				}
+				if opts.crs != "wgs84" {
+					return fmt.Errorf("unsupported GIS crs '%s'. Only 'wgs84' is supported", opts.crs)
+				}
+				if opts.distanceUnit != "m" {
+					return fmt.Errorf("unsupported GIS distance_unit '%s'. Only 'm' is supported", opts.distanceUnit)
+				}
+			} else if opts.crs != "" || opts.distanceUnit != "" {
+				return fmt.Errorf("index settings 'crs' and 'distance_unit' are supported only for 'gis' index type")
 			}
 			if opts.isUuid {
 				if fieldType != "string" {
@@ -508,20 +529,22 @@ func makeIndexDef(index string, jsonPaths []string, indexType, fieldType string,
 	}
 
 	return bindings.IndexDef{
-		Name:        index,
-		JSONPaths:   jsonPaths,
-		IndexType:   indexType,
-		FieldType:   fieldType,
-		IsArray:     opts.isArray,
-		IsPK:        opts.isPk,
-		IsDense:     opts.isDense,
-		IsNoColumn:  opts.isNoColumn,
-		IsSparse:    opts.isSparse,
-		CollateMode: cm,
-		SortOrder:   sortOrder,
-		ExpireAfter: expireAfter,
-		Config:      fv,
-		RTreeType:   opts.rtreeType,
+		Name:         index,
+		JSONPaths:    jsonPaths,
+		IndexType:    indexType,
+		FieldType:    fieldType,
+		IsArray:      opts.isArray,
+		IsPK:         opts.isPk,
+		IsDense:      opts.isDense,
+		IsNoColumn:   opts.isNoColumn,
+		IsSparse:     opts.isSparse,
+		CollateMode:  cm,
+		SortOrder:    sortOrder,
+		ExpireAfter:  expireAfter,
+		Config:       fv,
+		RTreeType:    opts.rtreeType,
+		Crs:          opts.crs,
+		DistanceUnit: opts.distanceUnit,
 	}
 }
 

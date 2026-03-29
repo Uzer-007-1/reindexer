@@ -1351,14 +1351,15 @@ private:
 
 class [[nodiscard]] ComparatorIndexedOffsetArrayDWithin {
 public:
-	ComparatorIndexedOffsetArrayDWithin(size_t offset, const VariantArray&);
+	ComparatorIndexedOffsetArrayDWithin(size_t offset, const VariantArray&, bool geo = false);
 	RX_ALWAYS_INLINE bool Compare(const PayloadValue& item, IdType /*rowId*/) const {
 		const PayloadFieldValue::Array& arr = *reinterpret_cast<const PayloadFieldValue::Array*>(item.Ptr() + offset_);
 		if (arr.len != 2) [[unlikely]] {
 			throw Error(errQueryExec, "DWithin with not point data");
 		}
 		const double* ptr = reinterpret_cast<const double*>(item.Ptr() + arr.offset);
-		return DWithin(Point{ptr[0], ptr[1]}, point_, distance_);
+		const Point p{ptr[0], ptr[1]};
+		return geo_ ? GeoDWithin(p, point_, distance_) : DWithin(p, point_, distance_);
 	}
 	static double CostMultiplier() noexcept { return comparators::kIdxOffsetComparatorCostMultiplier; }
 	std::string ConditionStr() const;
@@ -1369,11 +1370,12 @@ private:
 	Point point_;
 	double distance_;
 	size_t offset_;
+	bool geo_ = false;
 };
 
 class [[nodiscard]] ComparatorIndexedOffsetArrayDWithinDistinct {
 public:
-	ComparatorIndexedOffsetArrayDWithinDistinct(size_t offset, const VariantArray&);
+	ComparatorIndexedOffsetArrayDWithinDistinct(size_t offset, const VariantArray&, bool geo = false);
 	RX_ALWAYS_INLINE bool Compare(const PayloadValue& item, IdType /*rowId*/) const {
 		const PayloadFieldValue::Array& arr = *reinterpret_cast<const PayloadFieldValue::Array*>(item.Ptr() + offset_);
 		if (arr.len != 2) [[unlikely]] {
@@ -1381,7 +1383,7 @@ public:
 		}
 		const double* ptr = reinterpret_cast<const double*>(item.Ptr() + arr.offset);
 		const Point p{ptr[0], ptr[1]};
-		return DWithin(p, point_, distance_) && distinct_.Compare(p);
+		return (geo_ ? GeoDWithin(p, point_, distance_) : DWithin(p, point_, distance_)) && distinct_.Compare(p);
 	}
 	static double CostMultiplier() noexcept { return comparators::kIdxOffsetComparatorCostMultiplier; }
 	std::string ConditionStr() const;
@@ -1400,18 +1402,20 @@ private:
 	Point point_;
 	double distance_;
 	size_t offset_;
+	bool geo_ = false;
 };
 
 class [[nodiscard]] ComparatorIndexedJsonPathDWithin {
 public:
-	ComparatorIndexedJsonPathDWithin(const FieldsSet& fields, const PayloadType& payloadType, const VariantArray&);
+	ComparatorIndexedJsonPathDWithin(const FieldsSet& fields, const PayloadType& payloadType, const VariantArray&, bool geo = false);
 	RX_ALWAYS_INLINE bool Compare(const PayloadValue& item, IdType /*rowId*/) const {
 		VariantArray buffer;
 		ConstPayload(payloadType_, item).GetByJsonPath(tagsPath_, buffer, KeyValueType::Double{});
 		if (buffer.size() != 2) [[unlikely]] {
 			throw Error(errQueryExec, "DWithin with not point data");
 		}
-		return DWithin(Point{buffer[0].As<double>(), buffer[1].As<double>()}, point_, distance_);
+		const Point p{buffer[0].As<double>(), buffer[1].As<double>()};
+		return geo_ ? GeoDWithin(p, point_, distance_) : DWithin(p, point_, distance_);
 	}
 	static double CostMultiplier() noexcept { return comparators::kIdxJsonPathComparatorCostMultiplier; }
 	std::string ConditionStr() const;
@@ -1423,11 +1427,12 @@ private:
 	TagsPath tagsPath_;
 	Point point_;
 	double distance_;
+	bool geo_ = false;
 };
 
 class [[nodiscard]] ComparatorIndexedJsonPathDWithinDistinct {
 public:
-	ComparatorIndexedJsonPathDWithinDistinct(const FieldsSet& fields, const PayloadType& payloadType, const VariantArray&);
+	ComparatorIndexedJsonPathDWithinDistinct(const FieldsSet& fields, const PayloadType& payloadType, const VariantArray&, bool geo = false);
 	RX_ALWAYS_INLINE bool Compare(const PayloadValue& item, IdType /*rowId*/) const {
 		VariantArray buffer;
 		ConstPayload(payloadType_, item).GetByJsonPath(tagsPath_, buffer, KeyValueType::Double{});
@@ -1435,7 +1440,7 @@ public:
 			throw Error(errQueryExec, "DWithin with not point data");
 		}
 		const Point p{buffer[0].As<double>(), buffer[1].As<double>()};
-		return DWithin(p, point_, distance_) && distinct_.Compare(p);
+		return (geo_ ? GeoDWithin(p, point_, distance_) : DWithin(p, point_, distance_)) && distinct_.Compare(p);
 	}
 	static double CostMultiplier() noexcept { return comparators::kIdxJsonPathComparatorCostMultiplier; }
 	std::string ConditionStr() const;
@@ -1455,6 +1460,7 @@ private:
 	TagsPath tagsPath_;
 	Point point_;
 	double distance_;
+	bool geo_ = false;
 };
 
 template <typename T>
@@ -1788,9 +1794,9 @@ template <typename T>
 class [[nodiscard]] ComparatorIndexed {
 public:
 	ComparatorIndexed(std::string_view indexName, CondType cond, const VariantArray& values, const void* rawData, IsArray isArray,
-					  reindexer::IsDistinct distinct, const PayloadType& payloadType, const FieldsSet& fields,
+					  reindexer::IsDistinct distinct, const PayloadType& payloadType, const FieldsSet& fields, bool isGeo = false,
 					  const CollateOpts& collateOpts = CollateOpts())
-		: impl_{createImpl(cond, values, rawData, distinct, isArray, payloadType, fields, collateOpts)}, indexName_{indexName} {}
+		: impl_{createImpl(cond, values, rawData, distinct, isArray, payloadType, fields, isGeo, collateOpts)}, indexName_{indexName} {}
 
 	std::string_view Name() const noexcept { return indexName_; }
 	std::string ConditionStr() const;
@@ -1892,7 +1898,7 @@ public:
 private:
 	static comparators::ComparatorIndexedVariant<T> createImpl(CondType cond, const VariantArray&, const void* rawData,
 															   reindexer::IsDistinct distinct, IsArray isArray, const PayloadType&,
-															   const FieldsSet&, const CollateOpts&);
+															   const FieldsSet&, bool isGeo, const CollateOpts&);
 	double costMultiplier() const noexcept {
 		try {
 			return std::visit([](auto& impl) { return impl.CostMultiplier(); }, impl_);
@@ -2087,43 +2093,43 @@ extern template std::string ComparatorIndexed<Uuid>::ConditionStr() const;
 
 extern template comparators::ComparatorIndexedVariant<int> ComparatorIndexed<int>::createImpl(CondType, const VariantArray&, const void*,
 																							  reindexer::IsDistinct, IsArray,
-																							  const PayloadType&, const FieldsSet&,
+																							  const PayloadType&, const FieldsSet&, bool,
 																							  const CollateOpts&);
 extern template comparators::ComparatorIndexedVariant<int64_t> ComparatorIndexed<int64_t>::createImpl(CondType, const VariantArray&,
 																									  const void*, reindexer::IsDistinct,
 																									  IsArray, const PayloadType&,
-																									  const FieldsSet&, const CollateOpts&);
+																									  const FieldsSet&, bool, const CollateOpts&);
 extern template comparators::ComparatorIndexedVariant<double> ComparatorIndexed<double>::createImpl(CondType, const VariantArray&,
 																									const void*, reindexer::IsDistinct,
 																									IsArray, const PayloadType&,
-																									const FieldsSet&, const CollateOpts&);
+																									const FieldsSet&, bool, const CollateOpts&);
 extern template comparators::ComparatorIndexedVariant<bool> ComparatorIndexed<bool>::createImpl(CondType, const VariantArray&, const void*,
 																								reindexer::IsDistinct, IsArray,
-																								const PayloadType&, const FieldsSet&,
+																								const PayloadType&, const FieldsSet&, bool,
 																								const CollateOpts&);
 extern template comparators::ComparatorIndexedVariant<Uuid> ComparatorIndexed<Uuid>::createImpl(CondType, const VariantArray&, const void*,
 																								reindexer::IsDistinct, IsArray,
-																								const PayloadType&, const FieldsSet&,
+																								const PayloadType&, const FieldsSet&, bool,
 																								const CollateOpts&);
 template <>
 comparators::ComparatorIndexedVariant<key_string> ComparatorIndexed<key_string>::createImpl(CondType, const VariantArray&, const void*,
 																							reindexer::IsDistinct, IsArray,
-																							const PayloadType&, const FieldsSet&,
+																							const PayloadType&, const FieldsSet&, bool,
 																							const CollateOpts&);
 template <>
 comparators::ComparatorIndexedVariant<Point> ComparatorIndexed<Point>::createImpl(CondType, const VariantArray&, const void*,
 																				  reindexer::IsDistinct, IsArray, const PayloadType&,
-																				  const FieldsSet&, const CollateOpts&);
+																				  const FieldsSet&, bool, const CollateOpts&);
 template <>
 comparators::ComparatorIndexedVariant<PayloadValue> ComparatorIndexed<PayloadValue>::createImpl(CondType, const VariantArray&, const void*,
 																								reindexer::IsDistinct, IsArray,
-																								const PayloadType&, const FieldsSet&,
+																								const PayloadType&, const FieldsSet&, bool,
 																								const CollateOpts&);
 
 template <>
 comparators::ComparatorIndexedVariant<FloatVector> ComparatorIndexed<FloatVector>::createImpl(CondType, const VariantArray&, const void*,
 																							  reindexer::IsDistinct, IsArray,
-																							  const PayloadType&, const FieldsSet&,
+																							  const PayloadType&, const FieldsSet&, bool,
 																							  const CollateOpts&);
 
 }  // namespace reindexer

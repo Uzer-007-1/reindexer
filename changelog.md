@@ -3,6 +3,8 @@
 - [fea] Added [now()-function](readme.md#nowunit) support into `WHERE`-clause. Now it may be used both in `UPDATE SET` and `WHERE` clauses
 - [fea] Added [flat_array_len()-function](readme.md#flat_array_lenfield_name) into `UPDATE SET`. Now it may be used both in `UPDATE SET` and `WHERE` clauses
 - [fea] Added `checksum` field into `#memstats`-namespaces as better alternative for `datahash`
+- [fea] Added explicit GIS index contract (`index_type: gis`, `crs: wgs84`, `distance_unit: m`) and geodesic semantics for spatial distance functions on GIS indexes (`ST_DWithin`/`ST_Distance` in meters, antimeridian-aware indexed search)
+- [note] Compatibility: no automatic `rtree -> gis` migration is performed; migration should be explicit (new GIS index + reindex + query switch)
 - [fea] Changed [grouping logic for equal_position](readme.md#search-in-array-fields-with-matching-indexes-using-grouping). New syntax/logic has better match with standard json-paths and also supports nested arrays in explicit way
 - [fix] Fixed possible memory leak during `composite`-indexes substitution inside WHERE-clauses (in cases, when `int`->`string` convertion was performed before `composite` substitution)
 - [fix] Fixed SQL parsing for queries with combination of `or inner join(...)` and `left join(...)`
@@ -28,6 +30,7 @@
 
 ## Go connector
 - [fea] Added unified `WhereExpressions` method for better [functions](readme.md#functions) support and future filtering expressions development
+- [fea] Added GIS helpers and wrappers: `DWithinGeo`, `DWithinGeoChecked`, `SortStGeoPointDistance`, `SortStGeoPointDistanceChecked`, `SortStGeoFieldDistance`, plus WGS84 validation helpers in `gis.go`
 - [fix] Fixed deserialization crash for queries, where `inner join` stays before [equal_position](readme.md#search-in-array-fields-with-matching-indexes) in brackets
 
 ## Face

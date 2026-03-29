@@ -194,12 +194,14 @@ public:
 					 IndexDeclaration{kFieldNamePointQuadraticRTree, "rtree", "point", IndexOpts{}.RTreeType(IndexOpts::Quadratic), 0},
 					 IndexDeclaration{kFieldNamePointLinearRTree, "rtree", "point", IndexOpts{}.RTreeType(IndexOpts::Linear), 0},
 					 IndexDeclaration{kFieldNamePointGreeneRTree, "rtree", "point", IndexOpts{}.RTreeType(IndexOpts::Greene), 0},
-					 IndexDeclaration{kFieldNamePointRStarRTree, "rtree", "point", IndexOpts{}.RTreeType(IndexOpts::RStar), 0}});
+					 IndexDeclaration{kFieldNamePointRStarRTree, "rtree", "point", IndexOpts{}.RTreeType(IndexOpts::RStar), 0},
+					 IndexDeclaration{kFieldNamePointGisRStar, "gis", "point", IndexOpts{}.RTreeType(IndexOpts::RStar).Geo(true), 0}});
 		addIndexFields(geomNs, kFieldNameId, {{kFieldNameId, reindexer::KeyValueType::Int{}}});
 		addIndexFields(geomNs, kFieldNamePointQuadraticRTree, {{kFieldNamePointQuadraticRTree, reindexer::KeyValueType::Double{}}});
 		addIndexFields(geomNs, kFieldNamePointLinearRTree, {{kFieldNamePointLinearRTree, reindexer::KeyValueType::Double{}}});
 		addIndexFields(geomNs, kFieldNamePointGreeneRTree, {{kFieldNamePointGreeneRTree, reindexer::KeyValueType::Double{}}});
 		addIndexFields(geomNs, kFieldNamePointRStarRTree, {{kFieldNamePointRStarRTree, reindexer::KeyValueType::Double{}}});
+		addIndexFields(geomNs, kFieldNamePointGisRStar, {{kFieldNamePointGisRStar, reindexer::KeyValueType::Double{}}});
 
 		rt.OpenNamespace(btreeIdxOptNs);
 		DefineNamespaceDataset(btreeIdxOptNs, {IndexDeclaration{kFieldNameId, "tree", "int", IndexOpts().PK(), 0},
@@ -423,6 +425,9 @@ protected:
 
 				point = randPoint(10);
 				bld.Array(kFieldNamePointRStarRTree, {point.X(), point.Y()});
+
+				point = randPoint(10);
+				bld.Array(kFieldNamePointGisRStar, {point.X(), point.Y()});
 
 				point = randPoint(10);
 				bld.Array(kFieldNamePointNonIndex, {point.X(), point.Y()});
@@ -1226,6 +1231,7 @@ protected:
 	const char* kFieldNamePointLinearRTree = "point_linear_rtree";
 	const char* kFieldNamePointGreeneRTree = "point_greene_rtree";
 	const char* kFieldNamePointRStarRTree = "point_rstar_rtree";
+	const char* kFieldNamePointGisRStar = "point_gis_rstar";
 	const char* kFieldNamePointNonIndex = "point_field_non_index";
 
 	const char* kFieldNameColumnInt = "columnInt";

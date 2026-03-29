@@ -107,70 +107,83 @@ private:
 };
 
 struct [[nodiscard]] DistanceFromPoint {
-	DistanceFromPoint(std::string c, Point p) : column{std::move(c)}, index{IndexValueType::NotSet}, point{p} {}
+	DistanceFromPoint(std::string c, Point p, bool g = false) : column{std::move(c)}, index{IndexValueType::NotSet}, point{p}, geo{g} {}
 	double GetValue(ConstPayload, TagsMatcher&) const;
 	bool operator==(const DistanceFromPoint& other) const noexcept {
-		return column == other.column && index == other.index && point == other.point;
+		return column == other.column && index == other.index && point == other.point && geo == other.geo;
 	}
 
 	std::string column;
 	int index = IndexValueType::NotSet;
 	Point point;
+	bool geo = false;
 };
 
 struct [[nodiscard]] ProxiedDistanceFromPoint {
-	ProxiedDistanceFromPoint(std::string j, Point p) : json{std::move(j)}, point{p} {}
+	ProxiedDistanceFromPoint(std::string j, Point p, bool g = false) : json{std::move(j)}, point{p}, geo{g} {}
 	double GetValue(ConstPayload, TagsMatcher&) const;
-	bool operator==(const ProxiedDistanceFromPoint& other) const noexcept { return json == other.json && point == other.point; }
+	bool operator==(const ProxiedDistanceFromPoint& other) const noexcept { return json == other.json && point == other.point && geo == other.geo; }
 
 	std::string json;
 	Point point;
+	bool geo = false;
 };
 
 struct [[nodiscard]] DistanceJoinedIndexFromPoint {
-	DistanceJoinedIndexFromPoint(size_t nsInd, std::string c, Point p)
-		: nsIdx{nsInd}, column{std::move(c)}, index{IndexValueType::NotSet}, point{p} {}
+	DistanceJoinedIndexFromPoint(size_t nsInd, std::string c, Point p, bool g = false)
+		: nsIdx{nsInd}, column{std::move(c)}, index{IndexValueType::NotSet}, point{p}, geo{g} {}
 	double GetValue(IdType rowId, const joins::NamespaceResults&, const std::vector<JoinedSelector>&) const;
 	bool operator==(const DistanceJoinedIndexFromPoint& other) const noexcept {
-		return nsIdx == other.nsIdx && column == other.column && index == other.index && point == other.point;
+		return nsIdx == other.nsIdx && column == other.column && index == other.index && point == other.point && geo == other.geo;
 	}
 
 	size_t nsIdx;
 	std::string column;
 	int index = IndexValueType::NotSet;
 	Point point;
+	bool geo = false;
 };
 
 struct [[nodiscard]] DistanceBetweenIndexes {
-	DistanceBetweenIndexes(std::string c1, std::string c2)
-		: column1{std::move(c1)}, index1{IndexValueType::NotSet}, column2{std::move(c2)}, index2{IndexValueType::NotSet} {}
+	DistanceBetweenIndexes(std::string c1, std::string c2, bool g = false)
+		: column1{std::move(c1)}, index1{IndexValueType::NotSet}, column2{std::move(c2)}, index2{IndexValueType::NotSet}, geo{g} {}
 	double GetValue(ConstPayload, TagsMatcher&) const;
 	bool operator==(const DistanceBetweenIndexes& other) const noexcept {
-		return column1 == other.column1 && index1 == other.index1 && column2 == other.column2 && index2 == other.index2;
+		return column1 == other.column1 && index1 == other.index1 && column2 == other.column2 && index2 == other.index2 &&
+			   geo == other.geo;
 	}
 
 	std::string column1;
 	int index1 = IndexValueType::NotSet;
 	std::string column2;
 	int index2 = IndexValueType::NotSet;
+	bool geo = false;
 };
 
 struct [[nodiscard]] ProxiedDistanceBetweenFields {
-	ProxiedDistanceBetweenFields(std::string j1, std::string j2) : json1{std::move(j1)}, json2{std::move(j2)} {}
+	ProxiedDistanceBetweenFields(std::string j1, std::string j2, bool g = false) : json1{std::move(j1)}, json2{std::move(j2)}, geo{g} {}
 	double GetValue(ConstPayload, TagsMatcher&) const;
-	bool operator==(const ProxiedDistanceBetweenFields& other) const noexcept { return json1 == other.json1 && json2 == other.json2; }
+	bool operator==(const ProxiedDistanceBetweenFields& other) const noexcept {
+		return json1 == other.json1 && json2 == other.json2 && geo == other.geo;
+	}
 
 	std::string json1;
 	std::string json2;
+	bool geo = false;
 };
 
 struct [[nodiscard]] DistanceBetweenIndexAndJoinedIndex {
-	DistanceBetweenIndexAndJoinedIndex(std::string c, size_t jNsInd, std::string jc)
-		: column{std::move(c)}, index{IndexValueType::NotSet}, jNsIdx{jNsInd}, jColumn{std::move(jc)}, jIndex{IndexValueType::NotSet} {}
+	DistanceBetweenIndexAndJoinedIndex(std::string c, size_t jNsInd, std::string jc, bool g = false)
+		: column{std::move(c)},
+		  index{IndexValueType::NotSet},
+		  jNsIdx{jNsInd},
+		  jColumn{std::move(jc)},
+		  jIndex{IndexValueType::NotSet},
+		  geo{g} {}
 	double GetValue(ConstPayload, TagsMatcher&, IdType rowId, const joins::NamespaceResults&, const std::vector<JoinedSelector>&) const;
 	bool operator==(const DistanceBetweenIndexAndJoinedIndex& other) const noexcept {
 		return column == other.column && index == other.index && jNsIdx == other.jNsIdx && jColumn == other.jColumn &&
-			   jIndex == other.jIndex;
+			   jIndex == other.jIndex && geo == other.geo;
 	}
 
 	std::string column;
@@ -178,20 +191,22 @@ struct [[nodiscard]] DistanceBetweenIndexAndJoinedIndex {
 	size_t jNsIdx;
 	std::string jColumn;
 	int jIndex = IndexValueType::NotSet;
+	bool geo = false;
 };
 
 struct [[nodiscard]] DistanceBetweenJoinedIndexes {
-	DistanceBetweenJoinedIndexes(size_t nsInd1, std::string c1, size_t nsInd2, std::string c2)
+	DistanceBetweenJoinedIndexes(size_t nsInd1, std::string c1, size_t nsInd2, std::string c2, bool g = false)
 		: nsIdx1{nsInd1},
 		  column1{std::move(c1)},
 		  index1{IndexValueType::NotSet},
 		  nsIdx2{nsInd2},
 		  column2{std::move(c2)},
-		  index2{IndexValueType::NotSet} {}
+		  index2{IndexValueType::NotSet},
+		  geo{g} {}
 	double GetValue(IdType rowId, const joins::NamespaceResults&, const std::vector<JoinedSelector>&) const;
 	bool operator==(const DistanceBetweenJoinedIndexes& other) const noexcept {
 		return nsIdx1 == other.nsIdx1 && column1 == other.column1 && index1 == other.index1 && nsIdx2 == other.nsIdx2 &&
-			   column2 == other.column2 && index2 == other.index2;
+			   column2 == other.column2 && index2 == other.index2 && geo == other.geo;
 	}
 
 	size_t nsIdx1;
@@ -200,15 +215,21 @@ struct [[nodiscard]] DistanceBetweenJoinedIndexes {
 	size_t nsIdx2;
 	std::string column2;
 	int index2 = IndexValueType::NotSet;
+	bool geo = false;
 };
 
 struct [[nodiscard]] DistanceBetweenJoinedIndexesSameNs {
-	DistanceBetweenJoinedIndexesSameNs(size_t nsInd, std::string c1, std::string c2)
-		: nsIdx{nsInd}, column1{std::move(c1)}, index1{IndexValueType::NotSet}, column2{std::move(c2)}, index2{IndexValueType::NotSet} {}
+	DistanceBetweenJoinedIndexesSameNs(size_t nsInd, std::string c1, std::string c2, bool g = false)
+		: nsIdx{nsInd},
+		  column1{std::move(c1)},
+		  index1{IndexValueType::NotSet},
+		  column2{std::move(c2)},
+		  index2{IndexValueType::NotSet},
+		  geo{g} {}
 	double GetValue(IdType rowId, const joins::NamespaceResults&, const std::vector<JoinedSelector>&) const;
 	bool operator==(const DistanceBetweenJoinedIndexesSameNs& other) const noexcept {
 		return nsIdx == other.nsIdx && column1 == other.column1 && index1 == other.index1 && column2 == other.column2 &&
-			   index2 == other.index2;
+			   index2 == other.index2 && geo == other.geo;
 	}
 
 	size_t nsIdx;
@@ -216,6 +237,7 @@ struct [[nodiscard]] DistanceBetweenJoinedIndexesSameNs {
 	int index1 = IndexValueType::NotSet;
 	std::string column2;
 	int index2 = IndexValueType::NotSet;
+	bool geo = false;
 };
 
 }  // namespace SortExprFuncs
@@ -290,7 +312,7 @@ private:
 						   const std::vector<T>& joinedSelectors);
 	template <typename T, typename SkipSW>
 	void parseDistance(std::string_view& expr, const std::vector<T>& joinedSelectors, std::string_view fullExpr, ArithmeticOpType,
-					   bool negative, const SkipSW& skipSpaces);
+					   bool negative, bool geo, const SkipSW& skipSpaces);
 	template <typename T, typename SkipSW>
 	void parseRank(std::string_view& expr, const std::vector<T>& joinedSelectors, std::string_view fullExpr, ArithmeticOpType,
 				   bool negative, const SkipSW& skipSpaces);

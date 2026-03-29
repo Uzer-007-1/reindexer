@@ -154,6 +154,9 @@ IndexDef::IndexDef(std::string name, reindexer::JsonPaths jsonPaths, std::string
 	  fieldType_(std::move(fieldType)),
 	  opts_(std::move(opts)),
 	  expireAfter_(expireAfter) {
+	if (indexType_ == "gis"sv) {
+		opts_.Geo(true);
+	}
 	Validate();
 }
 
@@ -169,6 +172,9 @@ IndexDef::IndexDef(std::string name, std::string indexType, std::string fieldTyp
 	  indexType_(std::move(indexType)),
 	  fieldType_(std::move(fieldType)),
 	  opts_(std::move(opts)) {
+	if (indexType_ == "gis"sv) {
+		opts_.Geo(true);
+	}
 	Validate();
 }
 
@@ -218,6 +224,9 @@ IndexDef::DiffResult IndexDef::Compare(const IndexDef& o) const noexcept {
 }
 
 ::IndexType IndexDef::DetermineIndexType(std::string_view indexName, std::string_view indexType, std::string_view fieldType) {
+	if (indexType == "gis"sv) {
+		indexType = "rtree"sv;
+	}
 	if (indexType == ""sv) {
 		if (fieldType == "double"sv) {
 			indexType = "tree"sv;
@@ -280,6 +289,28 @@ IndexDef IndexDef::FromJSON(const gason::JsonNode& root) {
 	auto expireAfter = root["expire_after"sv].As<int64_t>();
 	const auto indexTypeEnum = DetermineIndexType(name, indexType, fieldType);
 	IndexOpts opts;
+	if (indexType == "gis"sv) {
+		opts.Geo(true);
+	}
+	const auto crs = root["crs"sv].As<std::string_view>();
+	if (!crs.empty()) {
+		if (crs == "wgs84"sv) {
+			opts.SetGeoCrs(IndexOpts::GeoCrs::WGS84);
+		} else {
+			throw Error(errParams, "Unknown CRS value '{}'. Only 'wgs84' is supported", crs);
+		}
+	}
+	const auto distanceUnit = root["distance_unit"sv].As<std::string_view>();
+	if (!distanceUnit.empty()) {
+		if (distanceUnit == "m"sv) {
+			opts.SetDistanceUnit(IndexOpts::GeoDistanceUnit::Meters);
+		} else {
+			throw Error(errParams, "Unknown distance_unit '{}'. Only 'm' is supported", distanceUnit);
+		}
+	}
+	if ((!crs.empty() || !distanceUnit.empty()) && !opts.IsGeo()) {
+		throw Error(errParams, "Index options 'crs' and 'distance_unit' are supported only for 'gis' indexes");
+	}
 	opts.PK(root["is_pk"sv].As<bool>());
 	opts.Array(root["is_array"sv].As<bool>());
 	opts.Dense(root["is_dense"sv].As<bool>());
@@ -334,16 +365,22 @@ void IndexDef::GetJSON(WrSerializer& ser, ExtraIndexDescription withExtras) cons
 	Validate();
 	JsonBuilder builder(ser);
 
+	const std::string_view jsonIndexType = (indexType_ == "rtree"sv && opts_.IsGeo()) ? "gis"sv : std::string_view{indexType_};
+
 	builder.Put("name"sv, name_);
 	builder.Put("field_type"sv, fieldType_);
-	builder.Put("index_type"sv, indexType_);
+	builder.Put("index_type"sv, jsonIndexType);
 	builder.Put("is_pk"sv, *opts_.IsPK());
 	builder.Put("is_array"sv, *opts_.IsArray());
 	builder.Put("is_dense"sv, *opts_.IsDense());
 	builder.Put("is_no_column", *opts_.IsNoIndexColumn());
 	builder.Put("is_sparse"sv, *opts_.IsSparse());
+	if (opts_.IsGeo()) {
+		builder.Put("crs"sv, opts_.Crs() == IndexOpts::GeoCrs::WGS84 ? "wgs84"sv : ""sv);
+		builder.Put("distance_unit"sv, opts_.DistanceUnit() == IndexOpts::GeoDistanceUnit::Meters ? "m"sv : ""sv);
+	}
 
-	if (indexType_ == "rtree"sv || fieldType_ == "point"sv) {
+	if (indexType_ == "rtree"sv || indexType_ == "gis"sv || fieldType_ == "point"sv) {
 		switch (opts_.RTreeType()) {
 			case IndexOpts::Linear:
 				builder.Put("rtree_type"sv, kRTreeLinear);

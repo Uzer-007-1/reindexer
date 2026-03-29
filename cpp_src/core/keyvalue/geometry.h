@@ -60,6 +60,22 @@ inline bool DWithin(Point lhs, Point rhs, double distance) noexcept {
 	return (lhs.X() - rhs.X()) * (lhs.X() - rhs.X()) + (lhs.Y() - rhs.Y()) * (lhs.Y() - rhs.Y()) <= distance * distance;
 }
 
+inline double GeoDistanceMeters(Point lhs, Point rhs) noexcept {
+	constexpr double kEarthRadiusMeters = 6371008.8;
+	constexpr double kPi = 3.14159265358979323846;
+	const double lat1 = lhs.Y() * kPi / 180.0;
+	const double lat2 = rhs.Y() * kPi / 180.0;
+	const double dLat = lat2 - lat1;
+	const double dLon = (rhs.X() - lhs.X()) * kPi / 180.0;
+	const double sinLat = std::sin(dLat / 2.0);
+	const double sinLon = std::sin(dLon / 2.0);
+	const double a = std::clamp(sinLat * sinLat + std::cos(lat1) * std::cos(lat2) * sinLon * sinLon, 0.0, 1.0);
+	const double c = 2.0 * std::atan2(std::sqrt(a), std::sqrt(1.0 - a));
+	return kEarthRadiusMeters * c;
+}
+
+inline bool GeoDWithin(Point lhs, Point rhs, double distanceMeters) noexcept { return GeoDistanceMeters(lhs, rhs) <= distanceMeters; }
+
 class [[nodiscard]] Rectangle {
 public:
 	Rectangle() noexcept : left_{}, right_{}, bottom_{}, top_{} {}
