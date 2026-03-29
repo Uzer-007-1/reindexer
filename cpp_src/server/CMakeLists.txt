@@ -168,7 +168,8 @@ if (ENABLE_GRPC)
         add_subdirectory(grpc)
         add_definitions(-DWITH_GRPC)
     else()
-        message(WARNING
+        set(ENABLE_GRPC OFF CACHE BOOL "Enable GRPC service" FORCE)
+        message(STATUS
             "ENABLE_GRPC=ON, but Protobuf and/or gRPC were not found. "
             "Continuing build without gRPC support. "
             "Install Protobuf/gRPC or reconfigure with -DENABLE_GRPC=OFF."
