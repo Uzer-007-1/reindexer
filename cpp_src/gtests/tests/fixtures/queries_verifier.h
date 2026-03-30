@@ -1047,6 +1047,7 @@ private:
 										  reindexer::Item& item, const reindexer::LocalQueryResults& qr) {
 		using namespace reindexer;
 		using namespace SortExprFuncs;
+		const auto calcDistance = [](Point lhs, Point rhs, bool geo) noexcept { return geo ? GeoDistanceMeters(lhs, rhs) : distance(lhs, rhs); };
 		double totalResult = 0.0;
 		double multResult = 0.0;
 		assertrx(begin != end);
@@ -1061,30 +1062,30 @@ private:
 					return values[0].As<double>();
 				},
 				[](const concepts::OneOf<Rank, RankNamed, Rrf, SortHash> auto&) -> double { abort(); },
-				[&item](const DistanceFromPoint& i) {
-					return distance(static_cast<Point>(static_cast<VariantArray>(item[i.column])), i.point);
+				[&item, &calcDistance](const DistanceFromPoint& i) {
+					return calcDistance(static_cast<Point>(static_cast<VariantArray>(item[i.column])), i.point, i.geo);
 				},
 				[&item, &qr](const DistanceJoinedIndexFromPoint& i) {
 					const auto values = getJoinedField(item.GetID(), qr, i.nsIdx, i.index, i.column);
-					return distance(static_cast<Point>(values), i.point);
+					return calcDistance(static_cast<Point>(values), i.point, i.geo);
 				},
-				[&item](const DistanceBetweenIndexes& i) {
-					return distance(static_cast<Point>(static_cast<VariantArray>(item[i.column1])),
-									static_cast<Point>(static_cast<VariantArray>(item[i.column2])));
+				[&item, &calcDistance](const DistanceBetweenIndexes& i) {
+					return calcDistance(static_cast<Point>(static_cast<VariantArray>(item[i.column1])),
+										static_cast<Point>(static_cast<VariantArray>(item[i.column2])), i.geo);
 				},
 				[&item, &qr](const DistanceBetweenIndexAndJoinedIndex& i) {
 					const auto jValues = getJoinedField(item.GetID(), qr, i.jNsIdx, i.jIndex, i.jColumn);
-					return distance(static_cast<Point>(static_cast<VariantArray>(item[i.column])), static_cast<Point>(jValues));
+					return calcDistance(static_cast<Point>(static_cast<VariantArray>(item[i.column])), static_cast<Point>(jValues), i.geo);
 				},
 				[&item, &qr](const DistanceBetweenJoinedIndexes& i) {
 					const auto values1 = getJoinedField(item.GetID(), qr, i.nsIdx1, i.index1, i.column1);
 					const auto values2 = getJoinedField(item.GetID(), qr, i.nsIdx2, i.index2, i.column2);
-					return distance(static_cast<Point>(values1), static_cast<Point>(values2));
+					return calcDistance(static_cast<Point>(values1), static_cast<Point>(values2), i.geo);
 				},
 				[&item, &qr](const DistanceBetweenJoinedIndexesSameNs& i) {
 					const auto values1 = getJoinedField(item.GetID(), qr, i.nsIdx, i.index1, i.column1);
 					const auto values2 = getJoinedField(item.GetID(), qr, i.nsIdx, i.index2, i.column2);
-					return distance(static_cast<Point>(values1), static_cast<Point>(values2));
+					return calcDistance(static_cast<Point>(values1), static_cast<Point>(values2), i.geo);
 				});
 			if (it->operation.negative) {
 				value = -value;
