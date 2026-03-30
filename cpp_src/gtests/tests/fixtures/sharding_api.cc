@@ -4,6 +4,7 @@
 #include "core/system_ns_names.h"
 #include "gtests/tests/gtest_cout.h"
 #include "yaml-cpp/yaml.h"
+#include <sys/resource.h>
 
 using namespace reindexer;
 
@@ -75,11 +76,19 @@ void ShardingApi::Init(InitShardingConfig c) {
 			clusterConf["nodes"].push_back(node);
 		}
 
-		shardingConfig.thisShardId = shard;
-		shardingConfig.proxyConnCount = 4;
-		shardingConfig.proxyConnThreads = 3;
-		shardingConfig.proxyConnConcurrency = 8;
-		shardingConfig.reconnectTimeout = std::chrono::milliseconds(6000);
+			shardingConfig.thisShardId = shard;
+			shardingConfig.proxyConnCount = 4;
+			shardingConfig.proxyConnThreads = 3;
+			shardingConfig.proxyConnConcurrency = 8;
+#if defined(RLIMIT_NOFILE)
+			struct rlimit nofileLimit {};
+			if (::getrlimit(RLIMIT_NOFILE, &nofileLimit) == 0 && nofileLimit.rlim_cur > 0 && nofileLimit.rlim_cur < 4096) {
+				shardingConfig.proxyConnCount = 1;
+				shardingConfig.proxyConnThreads = 1;
+				shardingConfig.proxyConnConcurrency = 2;
+			}
+#endif
+			shardingConfig.reconnectTimeout = std::chrono::milliseconds(6000);
 		shardingConfig.sourceId = 999;	// some initial test value
 		for (size_t idx = startId, node = 0; idx < startId + kNodesInCluster; ++idx, ++node) {
 			YAML::Node replConf;
