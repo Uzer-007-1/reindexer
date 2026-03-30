@@ -1,7 +1,7 @@
 #include "composite_indexes_api.h"
-#include "gmock/gmock.h"
 #include "vendor/fmt/ranges.h"
 #include "yaml-cpp/yaml.h"
+#include <regex>
 
 using QueryResults = ReindexerApi::QueryResults;
 using Item = ReindexerApi::Item;
@@ -342,7 +342,7 @@ TEST_F(CompositeIndexesApi, FastUpdateIndex) {
 			ASSERT_FALSE(err.ok()) << err.what();
 			auto err1Text = fmt::format("Cannot remove index '{}': it's a part of a composite index '.*'", kIndexNames[i]);
 			auto err2Text = fmt::format("Cannot convert key from type {} to {}", kFieldTypes[i], kFieldTypes[j]);
-			ASSERT_THAT(err.what(), testing::MatchesRegex(fmt::format("({}|{})", err1Text, err2Text)));
+			ASSERT_TRUE(std::regex_match(std::string(err.what()), std::regex(fmt::format("({}|{})", err1Text, err2Text)))) << err.what();
 		}
 	}
 }
