@@ -24,9 +24,10 @@ ArithmeticOpType operation(char ch) {
 }
 
 TEST(SortExpression, ParseGeoDistance) {
-	const auto parsed = SortExpression::Parse("ST_GeoDistance(point1, ST_GeomFromText('point(0 0)'))", {});
+	const std::vector<JoinedSelectorMock> emptyJoinedSelectors;
+	const auto parsed = SortExpression::Parse("ST_GeoDistance(point1, ST_GeomFromText('point(0 0)'))", emptyJoinedSelectors);
 	EXPECT_EQ(parsed.Dump(), "ST_GeoDistance(point1, [0, 0])");
-	EXPECT_THROW((void)SortExpression::Parse("ST_GeoDistance(point1, point1)", {}), reindexer::Error);
+	EXPECT_THROW((void)SortExpression::Parse("ST_GeoDistance(point1, point1)", emptyJoinedSelectors), reindexer::Error);
 }
 
 struct [[nodiscard]] RankFunction {
