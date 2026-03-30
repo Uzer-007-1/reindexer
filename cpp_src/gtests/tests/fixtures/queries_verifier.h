@@ -1056,7 +1056,7 @@ private:
 			return useGeo ? GeoDistanceMeters(lhs, rhs) : distance(lhs, rhs);
 		};
 		const auto getPoint = [&item](std::string_view field) {
-			const auto values = item.GetValueByJSONPath(field);
+			const auto values = static_cast<VariantArray>(item[field]);
 			assertrx(!values.empty());
 			return static_cast<Point>(values);
 		};
