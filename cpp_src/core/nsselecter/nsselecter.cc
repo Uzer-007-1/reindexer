@@ -1400,7 +1400,8 @@ bool NsSelecter::isSortIndexGeo(size_t nsIdx, int indexNo, const std::vector<Joi
 	return std::visit(overloaded{[](const JoinPreResult::Values&) { return false; },
 								 [&](const concepts::OneOf<IdSet, SelectIteratorContainer> auto&) {
 									 const auto& rightNs = *js.rightNs_;
-									 return indexNo < rightNs.indexes_.size() && rightNs.indexes_[indexNo]->Opts().IsGeo();
+									 const size_t idx = static_cast<size_t>(indexNo);
+									 return idx < rightNs.indexes_.size() && static_cast<bool>(rightNs.indexes_[idx]->Opts().IsGeo());
 								 }},
 					  js.PreResult().payload);
 }
@@ -1505,34 +1506,34 @@ void NsSelecter::prepareSortingContext(SortingEntries& sortBy, SelectCtx& ctx, Q
 						throw Error(errQueryExec, "Reciprocal rank fusion (RRF) is allowed in hybrid queries only");
 					}
 				},
-				[this, &lCtx](DistanceFromPoint& exprIndex) {
-					prepareSortIndex(*ns_, exprIndex.column, exprIndex.index, lCtx.strictMode, IsRanked_False);
-					if (!exprIndex.geo && exprIndex.index >= 0) {
-						exprIndex.geo = ns_->indexes_[exprIndex.index]->Opts().IsGeo();
-					}
-				},
+					[this, &lCtx](DistanceFromPoint& exprIndex) {
+						prepareSortIndex(*ns_, exprIndex.column, exprIndex.index, lCtx.strictMode, IsRanked_False);
+						if (!exprIndex.geo && exprIndex.index >= 0) {
+							exprIndex.geo = static_cast<bool>(ns_->indexes_[exprIndex.index]->Opts().IsGeo());
+						}
+					},
 				[&lCtx](DistanceJoinedIndexFromPoint& exprIndex) {
 					prepareSortJoinedIndex(exprIndex.nsIdx, exprIndex.column, exprIndex.index, lCtx.joinedSelectors, lCtx.strictMode);
 					if (!exprIndex.geo) {
 						exprIndex.geo = isSortIndexGeo(exprIndex.nsIdx, exprIndex.index, lCtx.joinedSelectors);
 					}
 				},
-				[this, &lCtx](DistanceBetweenIndexes& exprIndex) {
-					prepareSortIndex(*ns_, exprIndex.column1, exprIndex.index1, lCtx.strictMode, IsRanked_False);
-					prepareSortIndex(*ns_, exprIndex.column2, exprIndex.index2, lCtx.strictMode, IsRanked_False);
-					if (!exprIndex.geo && exprIndex.index1 >= 0 && exprIndex.index2 >= 0) {
-						exprIndex.geo = ns_->indexes_[exprIndex.index1]->Opts().IsGeo() || ns_->indexes_[exprIndex.index2]->Opts().IsGeo();
-					}
-				},
+					[this, &lCtx](DistanceBetweenIndexes& exprIndex) {
+						prepareSortIndex(*ns_, exprIndex.column1, exprIndex.index1, lCtx.strictMode, IsRanked_False);
+						prepareSortIndex(*ns_, exprIndex.column2, exprIndex.index2, lCtx.strictMode, IsRanked_False);
+						if (!exprIndex.geo && exprIndex.index1 >= 0 && exprIndex.index2 >= 0) {
+							exprIndex.geo = static_cast<bool>(ns_->indexes_[exprIndex.index1]->Opts().IsGeo()) ||
+											static_cast<bool>(ns_->indexes_[exprIndex.index2]->Opts().IsGeo());
+						}
+					},
 				[this, &lCtx](DistanceBetweenIndexAndJoinedIndex& exprIndex) {
-					prepareSortIndex(*ns_, exprIndex.column, exprIndex.index, lCtx.strictMode, IsRanked_False);
-					prepareSortJoinedIndex(exprIndex.jNsIdx, exprIndex.jColumn, exprIndex.jIndex, lCtx.joinedSelectors, lCtx.strictMode);
-					if (!exprIndex.geo && exprIndex.index >= 0) {
-						exprIndex.geo =
-							ns_->indexes_[exprIndex.index]->Opts().IsGeo() ||
-							isSortIndexGeo(exprIndex.jNsIdx, exprIndex.jIndex, lCtx.joinedSelectors);
-					}
-				},
+						prepareSortIndex(*ns_, exprIndex.column, exprIndex.index, lCtx.strictMode, IsRanked_False);
+						prepareSortJoinedIndex(exprIndex.jNsIdx, exprIndex.jColumn, exprIndex.jIndex, lCtx.joinedSelectors, lCtx.strictMode);
+						if (!exprIndex.geo && exprIndex.index >= 0) {
+							exprIndex.geo = static_cast<bool>(ns_->indexes_[exprIndex.index]->Opts().IsGeo()) ||
+											isSortIndexGeo(exprIndex.jNsIdx, exprIndex.jIndex, lCtx.joinedSelectors);
+						}
+					},
 				[&lCtx](DistanceBetweenJoinedIndexes& exprIndex) {
 					prepareSortJoinedIndex(exprIndex.nsIdx1, exprIndex.column1, exprIndex.index1, lCtx.joinedSelectors, lCtx.strictMode);
 					prepareSortJoinedIndex(exprIndex.nsIdx2, exprIndex.column2, exprIndex.index2, lCtx.joinedSelectors, lCtx.strictMode);
