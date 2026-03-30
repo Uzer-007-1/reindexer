@@ -294,10 +294,10 @@ TEST(RTree, GeoDWithinAntimeridianShortPath) {
 }
 
 TEST(RTree, GeoIndexDefJsonKeepsGisType) {
-	reindexer::IndexDef def{"pt", "rtree", "point", reindexer::IndexOpts().Geo().RTreeType(reindexer::IndexOpts::RStar)};
+	reindexer::IndexDef def{"pt", "rtree", "point", IndexOpts().Geo().RTreeType(IndexOpts::RStar)};
 	reindexer::WrSerializer ser;
 	def.GetJSON(ser);
-	const std::string json = ser.Slice();
+	const std::string json{ser.Slice()};
 	ASSERT_NE(json.find("\"index_type\":\"gis\""), std::string::npos) << json;
 	ASSERT_NE(json.find("\"crs\":\"wgs84\""), std::string::npos) << json;
 	ASSERT_NE(json.find("\"distance_unit\":\"m\""), std::string::npos) << json;
@@ -316,7 +316,7 @@ TEST(RTree, NonGisIndexDefRejectsGeoContractFields) {
 	}
 	)json";
 	const auto def = reindexer::IndexDef::FromJSON(json);
-	ASSERT_FALSE(def.ok());
+	ASSERT_FALSE(def.has_value());
 }
 
 // Make sure RTree indexes work with null values correctly
