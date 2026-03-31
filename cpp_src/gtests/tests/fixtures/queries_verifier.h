@@ -241,6 +241,10 @@ protected:
 			const bool skipGeoOrderVerification =
 				sortingEntry.expression.find("ST_GeoDistance(") != std::string::npos &&
 				sortingEntry.expression.find("gis") == std::string::npos && sortingEntry.expression.find("GIS") == std::string::npos;
+			if (skipGeoOrderVerification) {
+				lastSortedColumnValues[j] = reindexer::Variant{0.0};
+				continue;
+			}
 
 				reindexer::Variant sortedValue;
 				CollateOpts collate;
@@ -257,7 +261,7 @@ protected:
 				} else {
 					sortedValue = reindexer::Variant{calculateSortExpression(sortExpr.cbegin(), sortExpr.cend(), itemr, qr)};
 				}
-				if (!skipGeoOrderVerification && !lastSortedColumnValues[j].Type().Is<reindexer::KeyValueType::Null>()) {
+				if (!lastSortedColumnValues[j].Type().Is<reindexer::KeyValueType::Null>()) {
 					bool needToVerify = true;
 					for (int k = j - 1; k >= 0; --k) {
 						if (cmpRes[k] != reindexer::ComparationResult::Eq) {
