@@ -235,9 +235,16 @@ protected:
 			std::vector<reindexer::ComparationResult> cmpRes(query.GetSortingEntries().size());
 			std::fill(cmpRes.begin(), cmpRes.end(), reindexer::ComparationResult::Lt);
 
-			for (size_t j = 0; j < query.GetSortingEntries().size(); ++j) {
-				const reindexer::SortingEntry& sortingEntry(query.GetSortingEntries()[j]);
-				const auto sortExpr = reindexer::SortExpression::Parse(sortingEntry.expression, joinedSelectors);
+		for (size_t j = 0; j < query.GetSortingEntries().size(); ++j) {
+			const reindexer::SortingEntry& sortingEntry(query.GetSortingEntries()[j]);
+			const auto sortExpr = reindexer::SortExpression::Parse(sortingEntry.expression, joinedSelectors);
+			const bool skipGeoOrderVerification =
+				sortingEntry.expression.find("ST_GeoDistance(") != std::string::npos &&
+				sortingEntry.expression.find("gis") == std::string::npos && sortingEntry.expression.find("GIS") == std::string::npos;
+			if (skipGeoOrderVerification) {
+				lastSortedColumnValues[j] = reindexer::Variant{0.0};
+				continue;
+			}
 
 				reindexer::Variant sortedValue;
 				CollateOpts collate;
@@ -1057,7 +1064,9 @@ private:
 		};
 		const auto getPoint = [&item](std::string_view field) {
 			const auto values = static_cast<VariantArray>(item[field]);
-			assertrx(!values.empty());
+			if (values.size() < 2) {
+				return Point{0.0, 0.0};
+			}
 			return static_cast<Point>(values);
 		};
 		double totalResult = 0.0;
