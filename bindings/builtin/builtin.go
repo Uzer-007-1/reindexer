@@ -6,17 +6,17 @@ package builtin
 import "C"
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
 	"os"
-	"reflect"
 	"runtime"
 	"strings"
 	"sync"
 	"time"
 	"unsafe"
+
+	"github.com/goccy/go-json"
 
 	"github.com/restream/reindexer/v5/bindings"
 	"github.com/restream/reindexer/v5/cjson"
@@ -104,8 +104,12 @@ func init() {
 }
 
 func str2c(str string) C.reindexer_string {
-	hdr := (*reflect.StringHeader)(unsafe.Pointer(&str))
-	return C.reindexer_string{p: unsafe.Pointer(hdr.Data), n: C.int(hdr.Len)}
+	var p unsafe.Pointer
+	p = unsafe.Pointer(unsafe.StringData(str))
+	return C.reindexer_string{
+		p: p,
+		n: C.int(len(str)),
+	}
 }
 
 func ctxErr(errCode int) error {

@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"unsafe"
 
+	"github.com/golang/snappy"
 	"github.com/restream/reindexer/v5/bindings"
 	"github.com/restream/reindexer/v5/cjson"
-	"github.com/golang/snappy"
 )
 
 type rpcEncoder struct {
@@ -43,10 +43,12 @@ func (r *rpcEncoder) start(cmd int, seq uint32) {
 }
 
 func (r *rpcEncoder) startArgsChunck() {
-	r.lastArgsChunckStart = len(r.ser.Bytes())
+	b := r.ser.Bytes()
+	r.lastArgsChunckStart = len(b)
 	// num args
 	r.ser.PutVarUInt(0)
-	(*(*uint32)(unsafe.Pointer(&r.ser.Bytes()[8])))++
+	b = r.ser.Bytes()
+	(*(*uint32)(unsafe.Pointer(&b[8])))++
 }
 
 func (r *rpcEncoder) bytesArg(v []byte) {
@@ -96,8 +98,9 @@ func (r *rpcEncoder) int64Arg(v int64) {
 }
 
 func (r *rpcEncoder) update() {
-	r.ser.Bytes()[r.lastArgsChunckStart]++
-	*(*uint32)(unsafe.Pointer(&r.ser.Bytes()[8])) = uint32(len(r.ser.Bytes()) - cprotoHdrLen)
+	b := r.ser.Bytes()
+	b[r.lastArgsChunckStart]++
+	*(*uint32)(unsafe.Pointer(&b[8])) = uint32(len(b) - cprotoHdrLen)
 }
 
 func (r *rpcEncoder) bytes() []byte {
@@ -152,7 +155,7 @@ func (r *rpcDecoder) intArg() int {
 	return int(r.ser.GetVarInt())
 }
 
-func (r *rpcDecoder) intfArg() interface{} {
+func (r *rpcDecoder) intfArg() any {
 	t := r.ser.GetVarUInt()
 	switch int(t) {
 	case bindings.ValueInt:
